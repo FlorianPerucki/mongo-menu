@@ -1,0 +1,11 @@
+* This is an alpha, currently tested & improved
+
+* Feedbacks, issues & PRs welcome
+
+* TODO
+
+** Test different mongo client versions
+
+** Document available functions + screenshots
+
+** Fix the annoying JSON parsing error on ObjectId or ISODate
