@@ -18,6 +18,8 @@ Feedbacks, issues & PRs welcome
 
  - Improve buffer management
 
+ - Reload buffer (i.e. replay query) when pressing 'g'
+
 * Quickstart
 
 #+BEGIN_SRC lisp
