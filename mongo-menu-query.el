@@ -19,7 +19,11 @@ emacs cannot interpret as json. "
   )
 
 (defun mongo-menu-json-query (query)
-  (let ((output (mongo-menu-raw-query query)))
+  (let* ((output (mongo-menu-raw-query query))
+         (json-object-type 'hash-table)
+         (json-array-type 'list)
+         (json-key-type 'string))
+
     (json-read-from-string (mongo-menu-requote-output output))
     )
   )

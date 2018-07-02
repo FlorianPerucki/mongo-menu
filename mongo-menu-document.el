@@ -15,10 +15,13 @@
     )
   )
 
-(defun mongo-menu-get-current-document ()
+(defun mongo-menu-get-current-document (&optional jsonp)
   "Queries the current daabase and collection for the current document ID"
   (let ((query (format "db.%s.findOne({_id: %s})" mongo-menu-current-collection mongo-menu-current-document-id)))
-    (mongo-menu-raw-query query)
+    (if jsonp
+        (mongo-menu-json-query query)
+      (mongo-menu-raw-query query)
+      )
     )
   )
 

@@ -29,9 +29,6 @@
                         mongo-menu-query-sort
                         mongo-menu-query-skip
                         mongo-menu-query-limit))
-         (json-object-type 'hash-table)
-         (json-array-type 'list)
-         (json-key-type 'string)
          (data (mongo-menu-query-cursor query)))
     (mapcar 'mongo-menu-collection-extract data))
   )
