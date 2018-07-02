@@ -12,28 +12,27 @@ Feedbacks, issues & PRs welcome
 
  - Fix the annoying JSON parsing error on ObjectId or ISODate
 
+ - Handle pagination
+
+ - Fetch a collection's indices to build its default column templates
+
+ - Improve buffer management
+
 * Quickstart
 
 #+BEGIN_SRC lisp
-  (use-package mongo-menu
-    :load-path "/path/to/mongo-menu" ; since this is not on MELPA yet
-    :config
-    (setq mongo-menu-databases
-          '(
-           ("mydb1" . ["127.0.0.1" "user" "password"])
-           ("mydb2" . ["some.dns" "user" "password"]))
-          )
+(use-package mongo-menu
+  :load-path "/path/to/mongo-menu" ; since this is not on MELPA yet
+  :config
+  (setq mongo-menu-databases '(("mydb1" . ["127.0.0.1" "user" "password"])
+                               ("mydb2" . ["some.dns" "user" "password"])))
 
-    ;; see tabulated-list mode for the columns specification
-    (setq mongo-menu-collection-templates
-          '(
-            ("mydb1" . (
-                        ("collection1" . [("_id" 30 nil) ("field1" 50 nil) ("field2" 50 nil) ("field3" 20 nil)])
-                        ("collection2" . [("_id" 30 nil)])
-                        ))
-            ("mydb2" . (("other_collection" . [("_id" 30 nil) ("field2" 40 nil) ("nested.field" 20 nil)]))))
-          )
-    )
+  ;; see tabulated-list mode for the columns specification
+  (setq mongo-menu-collection-templates
+        '(("mydb1" . (("collection1" . [("_id" 30 nil) ("field1" 50 nil) ("field2" 50 nil) ("field3" 20 nil)])
+                      ("collection2" . [("_id" 30 nil)])))
+          ("mydb2" . (("other_collection" . [("_id" 30 nil) ("field2" 40 nil) ("nested.field" 20 nil)])))))
+  )
 #+END_SRC
 
 Now you can M-x mongo-menu-databases-buffer and press '?' for help

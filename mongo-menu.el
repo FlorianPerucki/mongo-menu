@@ -1,7 +1,3 @@
-;; TODO
-;; pagination
-;; fetch indices => collection template
-
 (defvar mongo-menu-databases nil)
 
 (defvar mongo-menu-client "/usr/local/bin/mongo")
