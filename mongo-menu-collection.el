@@ -41,7 +41,7 @@
   )
 
 (defun mongo-menu-value-template (field)
-  (let* ((value (mongo-menu-document-get-field (car field) row)))
+  (let ((value (mongo-menu-document-get-field (car field) row)))
     (mongo-menu-value-pretty value))
   )
 
@@ -87,8 +87,8 @@
   "Parent keymap for all keymaps of modes derived from `mongo-menu-collection-mode'."
   )
 
-(defun mongo-menu-collection-buffer (database collection &optional limit skip sort query)
-  (let ((buffer (get-buffer-create (format "mongo-menu: %s" mongo-menu-current-collection))))
+(defun mongo-menu-collection-buffer (database collection &optional limit skip sort query suffix)
+  (let ((buffer (get-buffer-create (format "mongo-menu: %s %s" mongo-menu-current-collection (or suffix "")))))
 
     (switch-to-buffer buffer)
     (mongo-menu-collection-mode)

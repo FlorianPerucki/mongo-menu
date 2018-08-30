@@ -31,7 +31,7 @@
 
 (defun mongo-menu-collections-buffer (database &optional defined)
   (interactive)
-  (let ((buffer (get-buffer-create "mongo-menu: collectionsz")))
+  (let ((buffer (get-buffer-create "mongo-menu: collections")))
     (switch-to-buffer buffer)
     (mongo-menu-collections-mode)
     (set (make-local-variable 'mongo-menu-current-database) database)
@@ -64,7 +64,7 @@
     )
   )
 
-(defun mongo-menu-collections-query-db (database collection query &optional limit skip sort)
+(defun mongo-menu-collections-query-db (database collection query &optional limit skip sort suffix)
   "Runs query on provided database's collection"
   (interactive)
 
@@ -81,9 +81,8 @@
                                   mongo-menu-query-limit
                                   mongo-menu-query-skip
                                   mongo-menu-query-sort
-                                  mongo-menu-collection-current-query)
-    )
-  )
+                                  mongo-menu-collection-current-query
+                                  suffix)))
 
 (defun mongo-menu-collections-query (query)
   (interactive "sQuery: ")

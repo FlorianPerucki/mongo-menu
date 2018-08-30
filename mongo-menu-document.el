@@ -15,9 +15,12 @@
     )
   )
 
-(defun mongo-menu-get-current-document (&optional jsonp)
+(defun mongo-menu-get-current-document (&optional jsonp projection)
   "Queries the current daabase and collection for the current document ID"
-  (let ((query (format "db.%s.findOne({_id: %s})" mongo-menu-current-collection mongo-menu-current-document-id)))
+  (let ((query (format "db.%s.findOne({_id: %s}, %s)"
+                       mongo-menu-current-collection
+                       mongo-menu-current-document-id
+                       (or projection "{}"))))
     (if jsonp
         (mongo-menu-json-query query)
       (mongo-menu-raw-query query)
@@ -25,7 +28,13 @@
     )
   )
 
-(defun mongo-menu-document-buffer (database collection id)
+(defun mongo-menu-find-one-document-json (database collection query)
+  "Queries the current daabase and collection for the document ID"
+  (interactive)
+  (let ((mongo-menu-current-database database))
+    (mongo-menu-json-query (format "db.%s.findOne(%s)" collection query))))
+
+(defun mongo-menu-document-buffer (database collection id &optional projection)
   "Creates and switches to a buffer displaying the JSON body of a document"
   (let* ((buffer (get-buffer-create "mongo-menu: document"))
          (window (split-window-right)))
@@ -41,7 +50,7 @@
     (set (make-local-variable 'mongo-menu-current-collection) collection)
     (set (make-local-variable 'mongo-menu-current-document-id) id)
 
-    (let ((document (mongo-menu-get-current-document)))
+    (let ((document (mongo-menu-get-current-document nil projection)))
 
       ;; requote to avoid json parsing errors
       (insert (mongo-menu-requote-output document))
@@ -55,6 +64,8 @@
       ;; TODO not actually working currently
       (perform-replace "\\\\\"" "\"" nil t nil)
       (perform-replace "\\(\"ObjectId(\"\\(.*?\\)\")\"\\)" "ObjectId(\"\\2\")" nil t nil)
+
+      (beginning-of-buffer)
 
       )
     )
