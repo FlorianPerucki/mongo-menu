@@ -78,7 +78,7 @@ emacs cannot interpret as json. "
                       host
                       query
                       )))
-      (shell-command-to-string cmd)))
+    (shell-command-to-string cmd)))
 
 (defun mongo-menu--extract-data-document-mongodb (database collection row)
   "Return a list of columns for a single document, according to the collection's columns settings.
