@@ -113,6 +113,7 @@ If defined is non-nil, not database fetch is done and only user-defined collecti
     (mongo-menu--display (format "%s > %s > " database collection)
                          rows
                          '(1
+                           ("o" mongo-menu--show-document "Open in buffer")
                            ("y" mongo-menu--action-copy-id "Copy row ID")
                            ("p" mongo-menu--previous-ivy "Previous")))))
 

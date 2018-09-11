@@ -91,15 +91,15 @@
 (defun mongo-menu--get-collection-sort (database collection)
   "Get and format the sorting preference for this database's collection"
   (let* ((sort (mongo-menu--get-collection-property :sort database collection))
-        (database-type (mongo-menu--get-database-property :type database))
-        (default-sort (symbol-value (intern (format "mongo-menu--collection-default-sort-%S" database-type)))))
+         (database-type (mongo-menu--get-database-property :type database))
+         (default-sort (symbol-value (intern (format "mongo-menu--collection-default-sort-%S" database-type)))))
     (or sort default-sort)))
 
 (defun mongo-menu--get-collection-limit (database collection)
   "This will get and format the maximum documents to fetch for this database's collection"
   (let* ((limit (mongo-menu--get-collection-property :limit database collection))
-        (database-type (mongo-menu--get-database-property :type database))
-        (default-limit (symbol-value (intern (format "mongo-menu-collection-default-limit-%S" database-type)))))
+         (database-type (mongo-menu--get-database-property :type database))
+         (default-limit (symbol-value (intern (format "mongo-menu-collection-default-limit-%S" database-type)))))
     (or limit default-limit)))
 
 (defun mongo-menu--get-collection-names (database &optional defined)
@@ -158,7 +158,7 @@ If database is a symbol, it is considered as the database type, e.g. 'mongodb
 Otherwise it must be a string matching a configured database name."
   (let ((database-type (if (symbolp database)
                            database
-                           (mongo-menu--get-database-property :type database))))
+                         (mongo-menu--get-database-property :type database))))
     (intern (format "mongo-menu--%s-%S" function-name database-type))))
 
 ;; helpers
@@ -211,5 +211,14 @@ property is already set the new value is appended."
 (defun mongo-menu--requote-output (database output)
   (let ((requote (mongo-menu--get-database-function "requote-output" database)))
     (funcall requote output)))
+
+(defun mongo-menu--show-document (row &optional projection)
+
+  "Action to execute on any row: add the row ID to the kill ring"
+  (let* ((database (get-text-property 0 :database row))
+         (collection (get-text-property 0 :collection row))
+         (document-id (get-text-property 0 :id row))
+         (show-document (mongo-menu--get-database-function "show-document" database)))
+    (funcall show-document database collection document-id)))
 
 (provide 'mongo-menu)

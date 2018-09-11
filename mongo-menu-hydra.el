@@ -12,6 +12,7 @@
                               (mapcar (apply-partially 'mongo-menu--format-entry-document ,database ,collection) entries)
                               ;; TODO: custom actions
                               '(1
+                                ("o" mongo-menu--show-document "Open in buffer")
                                 ("y" mongo-menu--action-copy-id "Copy row ID")))))))
 
 
@@ -24,7 +25,7 @@
            (lambda (query)
              (let* ((key (plist-get (cdr query) :key))
                     (name (plist-get (cdr query) :name)))
-               (list key (mongo-menu--hydra-run-query database collection query) name :exit t)))
+               (list key `(mongo-menu--hydra-run-query ,database ,collection ,query) name :exit t)))
            queries))
          (queries-heads (append (or default-queries (list)) queries-heads)))
     (eval `(defhydra mongo-menu--hydra-tmp (:color blue)

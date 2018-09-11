@@ -32,15 +32,38 @@
           (or skip 0)
           (or limit 10)))
 
-(defun mongo-menu--run-select-query-mongodb (database query)
+(defun mongo-menu--find-by-id-mongodb (database collection id)
+  "Find a document by its id and return it"
+  (let ((query (format "db.%s.findOne({_id: ObjectId(\"%s\")})" collection id)))
+    (mongo-menu--raw-query-mongodb database query)))
+
+(defun mongo-menu--run-select-query-mongodb (database query &optional raw)
   "Run find the query as a mongodb cursor and returns the output as a string JSON list"
   (let ((query (format "var cursor = %s; print(\"\[\"); while(cursor.hasNext()) { printjson(cursor.next()); if (cursor.hasNext()) {print(\",\");}} print(\"]\");" query)))
-    (mongo-menu--json-query-mongodb database query)))
+    (if raw
+        (mongo-menu--raw-query-mongodb database query)
+      (mongo-menu--json-query-mongodb database query))))
 
 (defun mongo-menu--extract-data-documents-mongodb (database collection data)
   "Return a list of extracted data according to the collection's columns settings.
 data: a JSON list of documents"
   (mapcar (apply-partially 'mongo-menu--extract-data-document-mongodb database collection) data))
+
+(defun mongo-menu--show-document-mongodb (database collection document-id)
+  "Fetch and display a document in a separate buffer"
+  (let* ((buffer (get-buffer-create "mongo-menu: document"))
+         (document (mongo-menu--find-by-id-mongodb database collection document-id)))
+
+    (switch-to-buffer buffer)
+    (toggle-read-only -1)
+
+    (insert document)
+
+    (beginning-of-buffer)
+    (json-mode)
+
+    (beginning-of-buffer)
+    (toggle-read-only 1)))
 
 
 ;; internal functions
