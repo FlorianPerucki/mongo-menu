@@ -1,31 +1,27 @@
 ;;; -*- lexical-binding: t; -*-
 
 (defun mongo-menu--hydra-run-query (database collection action)
-  (let* ((skip (plist-get (cdr action) :skip))
-         (query (plist-get (cdr action) :query))
-         (sort (plist-get (cdr action) :sort))
-         (limit (plist-get (cdr action) :limit)))
+  (let* ((skip (plist-get action :skip))
+         (query (plist-get action :query))
+         (sort (plist-get action :sort))
+         (limit (plist-get action :limit)))
     `(lambda ()
        (interactive)
-       (let ((entries (mongo-menu--build-and-run-select-query ,database ,collection ,skip ,query ,limit ,sort)))
-         (mongo-menu--display (format "%s > %s > " ,database ,collection)
-                              (mapcar (apply-partially 'mongo-menu--format-entry-document ,database ,collection) entries)
-                              ;; TODO: custom actions
-                              '(1
-                                ("o" mongo-menu--show-document "Open in buffer")
-                                ("y" mongo-menu--action-copy-id "Copy row ID")))))))
-
+       (let* ((entries (mongo-menu--build-and-run-select-query ,database ,collection ,skip ,query ,limit ,sort))
+             (entries (mapcar (apply-partially 'mongo-menu--format-entry-document-ivy ,database ,collection) entries)))
+         (mongo-menu--display :database ,database :collection ,collection :entries entries)))))
 
 (defun mongo-menu--build-hydra-queries (database collection)
+  "Build and display a hydra proposing actions for the previously selected collection"
   (let* ((queries (mongo-menu--get-collection-property :queries database collection))
          (default-queries (list
                            `("1" (lambda () (interactive) (mongo-menu--action-show-documents-ivy ,database ,collection)) "All")))
          (queries-heads
           (mapcar
            (lambda (query)
-             (let* ((key (plist-get (cdr query) :key))
-                    (name (plist-get (cdr query) :name)))
-               (list key `(mongo-menu--hydra-run-query ,database ,collection ,query) name :exit t)))
+             (let* ((key (plist-get query :key))
+                    (name (plist-get query :name)))
+               (list key (mongo-menu--hydra-run-query database collection query) name :exit t)))
            queries))
          (queries-heads (append (or default-queries (list)) queries-heads)))
     (eval `(defhydra mongo-menu--hydra-tmp (:color blue)
@@ -34,6 +30,7 @@
     (mongo-menu--hydra-tmp/body)))
 
 (defun mongo-menu--build-hydra-collections (database)
+  "Build and display a hydra proposing access to customized collections"
   (let* ((collections (mongo-menu--get-collection-names database t))
          (collection-heads
           (mapcar

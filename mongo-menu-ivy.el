@@ -3,29 +3,56 @@
 
 ;; required functions implementation for a front support
 
-(defun mongo-menu--databases-ivy (entries)
-  "Display database list.
-entries: string list"
-  (mongo-menu--display "> "
-                       (mapcar 'mongo-menu--format-entry-database-ivy entries)
-                       '(1
-                         ("o" mongo-menu--show-collections-defined-ivy "Show collections")
-                         ("a" mongo-menu--show-collections-ivy "Show all collections"))))
-
-(defun mongo-menu--collections-ivy (database entries)
-  "Display collections list for a given database.
-database: string
-entries: collections plist"
-  (mongo-menu--display (format "%s > " database)
-                       (mapcar (apply-partially 'mongo-menu--format-entry-collection-ivy database) entries)
-                       '(1
-                         ("o" mongo-menu--action-show-documents-entries-ivy "Show documents"))))
-
 (defun mongo-menu--display-ivy (prompt entries actions)
   "Run front-end command to display results"
   (ivy-read prompt
             entries
             :action actions))
+
+(defun mongo-menu--databases-ivy (entries)
+  "Display database list.
+entries: string list"
+  (mongo-menu--display :entries (mapcar 'mongo-menu--format-entry-database-ivy entries)
+                       :actions (list
+                                   '("o" mongo-menu--show-collections-defined-ivy "Show collections")
+                                   '("O" mongo-menu--show-collections-ivy "Show all collections"))))
+
+(defun mongo-menu--collections-ivy (database entries)
+  "Display collections list for a given database.
+database: string
+entries: collections plist"
+  (mongo-menu--display :database database
+                       :entries (mapcar (apply-partially 'mongo-menu--format-entry-collection-ivy database) entries)))
+
+(defun mongo-menu--get-prompt-ivy (&optional database collection)
+  "Return prompt for the document type currently being displayed:
+collections if collection is nil, documents if collection is non-nil"
+  (if collection
+      (format "%s > %s > " database collection)
+    (if database
+        (format "%s > " database)
+      "> ")))
+
+(defun mongo-menu--get-actions-ivy (&optional database collection)
+  "Return actions for the row type currently being displayed
+collections if collection is nil, documents if collection is non-nil"
+  (if collection
+      ;; actions on a document row
+      (let ((default-actions (list
+                              '("o" mongo-menu--show-document "Open in buffer")
+                              '("y" mongo-menu--action-copy-id "Copy row ID")))
+            (actions (mapcar 'mongo-menu--build-action-ivy (mongo-menu--get-collection-property :actions database collection))))
+        (append default-actions (or actions (list))))
+
+    ;; actions on a collection row
+    (if database (let ((default-actions (list
+                                         '("o" mongo-menu--action-show-documents-entries-ivy "Show documents")))
+                       (actions (mapcar 'mongo-menu--build-action-ivy (mongo-menu--get-database-property :actions database))))
+                   (append default-actions (or actions (list))))
+
+      ;; actions on a database row
+      (list))
+    ))
 
 
 ;; internals
@@ -103,18 +130,23 @@ If defined is non-nil, not database fetch is done and only user-defined collecti
   "Action to execute on a collection row: query and display a list of documents"
   (let* ((database (get-text-property 0 :database entry))
          (collection (get-text-property 0 :collection entry)))
-    (mongo-menu--action-show-documents-ivy database collection skip query)))
+    (mongo-menu--action-show-documents-ivy database collection skip query))) ; TODO limit + sort
+
+(defun mongo-menu--run-action (action)
+  (message "TODO"))
+
+(defun mongo-menu--build-action-ivy (action)
+  (let* ((key (plist-get action :key))
+         (name (plist-get action :name)))
+    `(,key (mongo-menu--run-action ,action) ,name)))
 
 (defun mongo-menu--action-show-documents-ivy (database collection &optional skip query limit sort)
   "Fetch and display collection's data, filtered by query if provided"
   (interactive)
   (let* ((documents (mongo-menu--build-and-run-select-query database collection skip query limit sort))
-         (rows (mapcar (apply-partially 'mongo-menu--format-entry-document-ivy database collection) documents)))
-    (mongo-menu--display (format "%s > %s > " database collection)
-                         rows
-                         '(1
-                           ("o" mongo-menu--show-document "Open in buffer")
-                           ("y" mongo-menu--action-copy-id "Copy row ID")
-                           ("p" mongo-menu--previous-ivy "Previous")))))
+         (entries (mapcar (apply-partially 'mongo-menu--format-entry-document-ivy database collection) documents)))
+    (mongo-menu--display :database database
+                         :collection collection
+                         :entries entries)))
 
 (provide 'mongo-menu-ivy)

@@ -41,22 +41,32 @@
 (cl-defun mongo-menu/configure-collection (database collection &key key columns actions sort limit queries)
   "Register a collection to an existing database"
   (interactive)
-  (let* ((database (mongo-menu--get-database database))
+  (let* ((database-object (mongo-menu--get-database database))
          (value (cons collection (list
                                   :key key
                                   :name collection
                                   :columns columns
-                                  :actions actions
+                                  :actions (mongo-menu--configure-actions database collection actions)
                                   :sort sort
                                   :limit limit
-                                  :queries (mongo-menu--configure-queries queries)))))
-    (mongo-menu--set-property :collections value database t)))
+                                  :queries queries))))
+    (mongo-menu--set-property :collections value database-object t)))
 
-(defun mongo-menu--configure-queries (queries)
-  "Format a list of queries customized with mongo-menu/configure-collection, for internal use"
-  (mapcar (lambda (query)
-            (let ((key (plist-get query :key)))
-              (cons key query))) queries))
+(defun mongo-menu--configure-actions (database collection actions)
+  "Ensure all actions have a database and a collection field. It could already have one if the action
+is targetting a different database/collection than the current one."
+  (mapcar #'(lambda (action)
+              (progn (when (not (plist-get action :database))
+                       (plist-put action :database database))
+                     (when (not (plist-get action :collection))
+                       (plist-put action :collection collection))
+                     action))
+          actions))
+;; (defun mongo-menu--configure-queries (queries)
+;;   "Format a list of queries customized with mongo-menu/configure-collection, for internal use"
+;;   (mapcar (lambda (query)
+;;             (let ((key (plist-get query :key)))
+;;               (cons key query))) queries))
 ;;
 ;; public - commands
 ;;
@@ -121,6 +131,7 @@ column: plist"
 
 (defun mongo-menu--build-and-run-select-query (database collection &optional skip query limit sort)
   "Run query on collection and return extracted results"
+  ;; TODO make it a database-specific method
   (let* ((query (mongo-menu--build-select-query database collection skip query limit sort))
          (data (mongo-menu--run-select-query database query)))
     (mongo-menu--extract-data-documents database collection data)))
@@ -161,17 +172,32 @@ Otherwise it must be a string matching a configured database name."
                          (mongo-menu--get-database-property :type database))))
     (intern (format "mongo-menu--%s-%S" function-name database-type))))
 
-;; helpers
+;; accessing front methods
 
-(defun mongo-menu--format-entry-document (database collection document)
-  "Format a document row to make it compatible with the selector (e.g. ivy)"
-  (let ((formatter (intern (format "mongo-menu--format-entry-document-%S" mongo-menu-selector))))
-    (funcall formatter database collection document)))
+(defun mongo-menu--get-actions (&optional database collection)
+  "Return actions for the document type currently being displayed
+collections if collection is nil, documents if collection is non-nil"
+  (let ((get-actions (intern (format "mongo-menu--get-actions-%S" mongo-menu-selector))))
+    (funcall get-actions database collection)))
 
-(defun mongo-menu--display (prompt entries actions)
+(defun mongo-menu--get-prompt (database &optional collection)
+  "Get formatted prompt for database and collection if provided"
+  (let ((get-prompt (intern (format "mongo-menu--get-prompt-%S" mongo-menu-selector))))
+    (funcall get-prompt database collection)))
+
+(defun mongo-menu--display-prompt (prompt entries actions)
   "Run front-end command to display results"
   (let ((display (intern (format "mongo-menu--display-%S" mongo-menu-selector))))
     (funcall display prompt entries actions)))
+
+;; helpers
+
+(cl-defun mongo-menu--display (&key database collection entries actions)
+  "Generic method to display prompt and results using the configured selector (e.g. ivy)"
+  (let* ((custom-actions (mongo-menu--get-actions database collection))
+         (actions (append (or actions (list)) custom-actions))
+         (prompt (mongo-menu--get-prompt database collection)))
+    (mongo-menu--display-prompt prompt entries (cons 1 actions))))
 
 (defun mongo-menu--set-property (property value item &optional tolist)
   "Set an item property to the given value.
