@@ -36,7 +36,6 @@
                              :user user
                              :password password))))))
 
-
 ;;;###autoload
 (cl-defun mongo-menu/configure-collection (database collection &key key columns actions sort limit queries)
   "Register a collection to an existing database"
@@ -52,6 +51,24 @@
                                   :queries queries))))
     (mongo-menu--set-property :collections value database-object t)))
 
+;;;###autoload
+(cl-defun mongo-menu/display (database &key collection skip query limit sort foreign-key document-id single)
+  "Build a query, run it and display its output, either a list of rows or a single document if documentp is non-nil."
+  (interactive)
+  (if single
+      ;; show a single document
+      (let ((show-document (mongo-menu--get-database-function "show-document" database)))
+        (funcall show-document database collection document-id foreign-key))
+    ;; display rows
+    (let* ((query (mongo-menu--compose-query database
+                                             :query query
+                                             :foreign-key foreign-key
+                                             :document-id document-id))
+           (data (mongo-menu--build-and-run-select-query database collection skip query limit sort))
+           (entries (mapcar (apply-partially 'mongo-menu--format-entry-document database collection) data)))
+      (mongo-menu--display :database database :collection collection :entries entries))))
+
+;;;###autoload
 (defun mongo-menu--configure-actions (database collection actions)
   "Ensure all actions have a database and a collection field. It could already have one if the action
 is targetting a different database/collection than the current one."
@@ -71,6 +88,11 @@ is targetting a different database/collection than the current one."
 ;; public - commands
 ;;
 
+(defun mongo-menu--format-entry-document (database collection row)
+  "Format a data ROW so it can be displayed in the selected front tool (ivy)"
+  (let ((format-function (intern (format "mongo-menu--format-entry-document-%S" mongo-menu-selector))))
+    (funcall format-function database collection row)))
+
 (defun mongo-menu-show-databases ()
   "Lists your defined databases"
   (interactive)
@@ -84,7 +106,55 @@ is targetting a different database/collection than the current one."
     (funcall display-function database collections)))
 
 
-;; Predefined actions
+;; actions
+
+(defun mongo-menu--run-action (action entry)
+  "Execute an ACTION on an document ENTRY.
+
+The executed action depends on the ACTION type property:
+
+read: execute a read operation"
+  (let* ((action-type (or (plist-get action :type) 'read))
+         ;; target database for action, defaults to current
+         (database (or
+                    (plist-get action :database)
+                    (get-text-property 0 :database entry)))
+         ;; target collection for action, defaults to current
+         (collection (or
+                      (plist-get action :collection)
+                      (get-text-property 0 :collection entry)))
+         ;; document unique id
+         (document-id (get-text-property 0 :id entry))
+         ;; if provided, this is the field name to use instead of the
+         ;; database default unique id field
+         (foreign-key (plist-get action :foreign))
+         ;; if t, the query returns a single document that we'll show in a new buffer
+         (single (plist-get action :single))
+         ;; usual query parameters
+         (sort (plist-get action :sort))
+         (limit (plist-get action :limit))
+         (skip (plist-get action :skip))
+         (projection (plist-get action :projection))
+         (query (plist-get action :query)))
+    (if (equal action-type 'read)
+        (mongo-menu/display database
+                            :collection collection
+                            :skip skip
+                            :query query
+                            :limit limit
+                            :sort sort
+                            :foreign-key foreign-key
+                            :document-id document-id
+                            :single single)
+      (error "Unknown action type %S" action-type))))
+
+(cl-defun mongo-menu--compose-query (database &key query document-id foreign-key)
+  "Build a single query from multiple arguments"
+  (let ((compose-query (mongo-menu--get-database-function "compose-query" database)))
+    (funcall compose-query
+             :document-id document-id
+             :query query
+             :foreign-key foreign-key)))
 
 (defun mongo-menu--action-copy-id (row)
   "Action to execute on any row: add the row ID to the kill ring"

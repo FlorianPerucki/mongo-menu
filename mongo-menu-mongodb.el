@@ -11,6 +11,14 @@
 
 ;; required functions implementation for a database support
 
+(cl-defun mongo-menu--compose-query-mongodb (&key query document-id foreign-key)
+  "Build a single query from multiple arguments"
+  (let ((query (or query "{}")))
+    (if document-id
+        (let ((query (car (split-string query "[{}]" t))))
+          (format "{%s, %s: ObjectId(\"%s\")}" query (or foreign-key "_id") document-id))
+      query)))
+
 (defun mongo-menu--get-collection-names-mongodb (database)
   "Fetches collection names remotely."
   (mongo-menu--json-query-mongodb database "db.getCollectionNames()"))
@@ -32,9 +40,9 @@
           (or skip 0)
           (or limit 10)))
 
-(defun mongo-menu--find-by-id-mongodb (database collection id)
+(defun mongo-menu--find-by-id-mongodb (database collection id &optional field)
   "Find a document by its id and return it"
-  (let ((query (format "db.%s.findOne({_id: ObjectId(\"%s\")})" collection id)))
+  (let ((query (format "db.%s.findOne({%s: ObjectId(\"%s\")})" collection (or field "_id") id)))
     (mongo-menu--raw-query-mongodb database query)))
 
 (defun mongo-menu--run-select-query-mongodb (database query &optional raw)
@@ -49,20 +57,19 @@
 data: a JSON list of documents"
   (mapcar (apply-partially 'mongo-menu--extract-data-document-mongodb database collection) data))
 
-(defun mongo-menu--show-document-mongodb (database collection document-id)
+(defun mongo-menu--show-document-mongodb (database collection document-id &optional field)
   "Fetch and display a document in a separate buffer"
-  (let* ((buffer (get-buffer-create "mongo-menu: document"))
-         (document (mongo-menu--find-by-id-mongodb database collection document-id)))
+  (let* ((buffer (get-buffer-create (format "mongo-menu: %s (%s)" collection document-id)))
+         (document (mongo-menu--find-by-id-mongodb database collection document-id field)))
 
     (switch-to-buffer buffer)
     (toggle-read-only -1)
 
+    (erase-buffer)
     (insert document)
-
     (beginning-of-buffer)
+
     (json-mode)
-
-    (beginning-of-buffer)
     (toggle-read-only 1)))
 
 

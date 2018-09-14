@@ -132,13 +132,10 @@ If defined is non-nil, not database fetch is done and only user-defined collecti
          (collection (get-text-property 0 :collection entry)))
     (mongo-menu--action-show-documents-ivy database collection skip query))) ; TODO limit + sort
 
-(defun mongo-menu--run-action (action)
-  (message "TODO"))
-
 (defun mongo-menu--build-action-ivy (action)
   (let* ((key (plist-get action :key))
          (name (plist-get action :name)))
-    `(,key (mongo-menu--run-action ,action) ,name)))
+    (list key (apply-partially 'mongo-menu--run-action action) name)))
 
 (defun mongo-menu--action-show-documents-ivy (database collection &optional skip query limit sort)
   "Fetch and display collection's data, filtered by query if provided"

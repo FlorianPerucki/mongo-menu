@@ -1,15 +1,16 @@
 ;;; -*- lexical-binding: t; -*-
 
-(defun mongo-menu--hydra-run-query (database collection action)
+(defun mongo-menu--build-hydra-query (database collection action)
   (let* ((skip (plist-get action :skip))
          (query (plist-get action :query))
-         (sort (plist-get action :sort))
-         (limit (plist-get action :limit)))
-    `(lambda ()
-       (interactive)
-       (let* ((entries (mongo-menu--build-and-run-select-query ,database ,collection ,skip ,query ,limit ,sort))
-             (entries (mapcar (apply-partially 'mongo-menu--format-entry-document-ivy ,database ,collection) entries)))
-         (mongo-menu--display :database ,database :collection ,collection :entries entries)))))
+         (limit (plist-get action :limit))
+         (sort (plist-get action :sort)))
+    `(mongo-menu/display ,database
+                         :collection ,collection
+                         :skip ,skip
+                         :query ,query
+                         :limit ,limit
+                         :sort ,sort)))
 
 (defun mongo-menu--build-hydra-queries (database collection)
   "Build and display a hydra proposing actions for the previously selected collection"
@@ -21,7 +22,7 @@
            (lambda (query)
              (let* ((key (plist-get query :key))
                     (name (plist-get query :name)))
-               (list key (mongo-menu--hydra-run-query database collection query) name :exit t)))
+               (list key (mongo-menu--build-hydra-query database collection query) name :exit t)))
            queries))
          (queries-heads (append (or default-queries (list)) queries-heads)))
     (eval `(defhydra mongo-menu--hydra-tmp (:color blue)
@@ -51,8 +52,5 @@
     (eval `(defhydra hydra-mongo-menu (:color blue)
              "Mongo-menu"
              ,@database-heads))))
-
-(mongo-menu--build-hydras)
-(global-set-key (my/kbd "q") 'hydra-mongo-menu/body)
 
 (provide 'mongo-menu-hydra)
