@@ -4,6 +4,7 @@
 
 (defvar collect-selector 'ivy)
 (defvar collect--debug nil)
+;; (setq collect--debug t)
 
 (defvar collect-collection-default-columns (list '(:name "_id" :width 30)))
 

@@ -6,17 +6,16 @@
 (defcustom collect-collection-default-limit-mongodb 20
   "Default number of documents to fetch in a SELECT query")
 
-(defvar collect--collection-default-sort-mongodb "{_id: -1}")
+(defvar collect--collection-default-sort-mongodb "_id: -1")
 
 
 ;; required functions implementation for a database support
 
 (cl-defun collect--compose-query-mongodb (&key query document-id foreign-key)
   "Build a single query from multiple arguments"
-  (let ((query (or query "{}")))
+  (let ((query (or query "")))
     (if document-id
-        (let ((query (car (split-string query "[{}]" t))))
-          (format "{%s, %s: ObjectId(\"%s\")}" query (or foreign-key "_id") document-id))
+        (format "%s, %s: ObjectId(\"%s\")" query (or foreign-key "_id") document-id)
       query)))
 
 (defun collect--get-collection-names-mongodb (database)
@@ -28,17 +27,17 @@
   (let* ((columns (collect--get-collection-columns database collection))
          (fields (mapcar (lambda (column) (format "\"%s\": 1" (plist-get column :name)))
                          columns)))
-    (format "{%s}" (string-join fields ", "))))
+    (string-join fields ", ")))
 
 (defun collect--build-select-query-mongodb (collection projection &optional skip sort limit query)
   "Return the MongoDB string to use as a SELECT (i.e. a find) query."
-  (format "db.%s.find(%s, %s).sort(%s).skip(%s).limit(%s)"
+  (format "db.%s.find({%s}, {%s}).sort({%s}).skip(%s).limit(%s)"
           collection
-          (or query "{}")
+          (or query "")
           projection
-          (or sort "{}")
+          (or sort "")
           (or skip 0)
-          (or limit 10)))
+          (or limit collect-collection-default-limit-mongodb)))
 
 (defun collect--find-by-id-mongodb (database collection id &optional field)
   "Find a document by its id and return it"
@@ -108,7 +107,12 @@ emacs cannot interpret as json. "
                       host
                       query
                       )))
-    (shell-command-to-string cmd)))
+    (let ((output (shell-command-to-string cmd)))
+      (progn
+        (when collect--debug
+          (message "[MONGODB] QUERY: %s" query)
+          (message "[MONGODB] RESPONSE: %s" output))
+        output))))
 
 (defun collect--extract-data-document-mongodb (database collection row)
   "Return a list of columns for a single document, according to the collection's columns settings.
