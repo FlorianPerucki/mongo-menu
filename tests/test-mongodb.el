@@ -2,14 +2,14 @@
 
 
 (defun run-query-test (test)
-  (let (mongo-menu--databases (list))
-    (mongo-menu/add-database
+  (let (collect--databases (list))
+    (collect/add-database
      "db1"
      :type 'mongodb
      :host "host1"
      :user "user"
      :password "password")
-    (mongo-menu/configure-collection
+    (collect/configure-collection
      "db1"
      "collection1"
      :columns (list
@@ -25,13 +25,13 @@
      )
     (funcall test)))
 
-(ert-deftest test-mongo-menu--requote-output ()
+(ert-deftest test-collect--requote-output ()
   "Test that invalid JSON objects are correctly escaped"
   (should (string-equal
-           (mongo-menu--requote-output 'mongodb "{\"_id\": ObjectId(\"1234\")}")
+           (collect--requote-output 'mongodb "{\"_id\": ObjectId(\"1234\")}")
            "{\"_id\": \"ObjectId(\\\"1234\\\")\"}"))
   (should (string-equal
-           (mongo-menu--requote-output 'mongodb "{\"date\": ISODate(\"1111\")}")
+           (collect--requote-output 'mongodb "{\"date\": ISODate(\"1111\")}")
            "{\"date\": \"ISODate(\\\"1111\\\")\"}")))
 
 (ert-deftest test-get-collection-projection ()
@@ -39,21 +39,21 @@
   (run-query-test
    (lambda ()
      (should (equal
-              (mongo-menu--get-collection-projection-mongodb "db1" "collection1")
+              (collect--get-collection-projection-mongodb "db1" "collection1")
               "{\"_id\": 1, \"name\": 1, \"nested.field\": 1}")))))
 
 (ert-deftest test-build-select-query-mongodb ()
   (run-query-test
    (lambda ()
      (should (equal
-              (mongo-menu--build-select-query-mongodb
+              (collect--build-select-query-mongodb
                "collection1"
-               (mongo-menu--get-collection-projection-mongodb "db1" "collection1"))
+               (collect--get-collection-projection-mongodb "db1" "collection1"))
               "db.collection1.find({}, {\"_id\": 1, \"name\": 1, \"nested.field\": 1}).sort({}).skip(0).limit(10)"))
      (should (equal
-              (mongo-menu--build-select-query-mongodb
+              (collect--build-select-query-mongodb
                "collection1"
-               (mongo-menu--get-collection-projection-mongodb "db1" "collection1")
+               (collect--get-collection-projection-mongodb "db1" "collection1")
                10
                "{_id: -1}"
                30
@@ -65,7 +65,7 @@
   (run-query-test
    (lambda ()
      (should (equal
-              (mongo-menu--extract-data-documents-mongodb
+              (collect--extract-data-documents-mongodb
                "db1"
                "collection1"
                (list #s(hash-table
