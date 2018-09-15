@@ -12,6 +12,7 @@
 (defvar collect--databases (list))
 
 (require 'collect-ivy)
+(require 'collect-hydra)
 (require 'collect-mongodb)
 
 ;;
