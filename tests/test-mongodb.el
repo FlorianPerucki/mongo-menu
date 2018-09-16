@@ -3,13 +3,13 @@
 
 (defun run-query-test (test)
   (let (collect--databases (list))
-    (collect/add-database
+    (collect-add-database
      "db1"
      :type 'mongodb
      :host "host1"
      :user "user"
      :password "password")
-    (collect/configure-collection
+    (collect-configure-collection
      "db1"
      "collection1"
      :columns (list
@@ -28,10 +28,10 @@
 (ert-deftest test-collect--requote-output ()
   "Test that invalid JSON objects are correctly escaped"
   (should (string-equal
-           (collect--requote-output 'mongodb "{\"_id\": ObjectId(\"1234\")}")
+           (collect--mongodb-requote-output "{\"_id\": ObjectId(\"1234\")}")
            "{\"_id\": \"ObjectId(\\\"1234\\\")\"}"))
   (should (string-equal
-           (collect--requote-output 'mongodb "{\"date\": ISODate(\"1111\")}")
+           (collect--mongodb-requote-output "{\"date\": ISODate(\"1111\")}")
            "{\"date\": \"ISODate(\\\"1111\\\")\"}")))
 
 (ert-deftest test-get-collection-projection ()
@@ -39,25 +39,25 @@
   (run-query-test
    (lambda ()
      (should (equal
-              (collect--get-collection-projection-mongodb "db1" "collection1")
-              "{\"_id\": 1, \"name\": 1, \"nested.field\": 1}")))))
+              (collect--mongodb-get-collection-projection "db1" "collection1")
+              "\"_id\": 1, \"name\": 1, \"nested.field\": 1")))))
 
 (ert-deftest test-build-select-query-mongodb ()
   (run-query-test
    (lambda ()
      (should (equal
-              (collect--build-select-query-mongodb
+              (collect--mongodb-build-select-query
                "collection1"
-               (collect--get-collection-projection-mongodb "db1" "collection1"))
+               (collect--mongodb-get-collection-projection "db1" "collection1"))
               "db.collection1.find({}, {\"_id\": 1, \"name\": 1, \"nested.field\": 1}).sort({}).skip(0).limit(10)"))
      (should (equal
-              (collect--build-select-query-mongodb
+              (collect--mongodb-build-select-query
                "collection1"
-               (collect--get-collection-projection-mongodb "db1" "collection1")
+               (collect--mongodb-get-collection-projection "db1" "collection1")
                10
-               "{_id: -1}"
+               "_id: -1"
                30
-               "{name: \"foo\"}")
+               "name: \"foo\"")
               "db.collection1.find({name: \"foo\"}, {\"_id\": 1, \"name\": 1, \"nested.field\": 1}).sort({_id: -1}).skip(10).limit(30)")))))
 
 (ert-deftest test-extract-data-documents-mongodb ()
@@ -65,7 +65,7 @@
   (run-query-test
    (lambda ()
      (should (equal
-              (collect--extract-data-documents-mongodb
+              (collect--mongodb-extract-data-documents
                "db1"
                "collection1"
                (list #s(hash-table

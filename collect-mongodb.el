@@ -1,35 +1,70 @@
-;; -*- lexical-binding: t -*-
+;;; collect.el --- Read quickly from multiple databases -*- lexical-binding: t -*-
+
+;; Copyright (C) 2018-2019  Free Software Foundation, Inc.
+
+;; Author: Florian Perucki <florian@perucki.fr>
+;; URL: https://github.com/florianperucki/collect
+;; Version: 0.0.1
+;; Package-Requires: ((emacs "24.1") (ivy "0.10.0") (hydra 0.14.0))
+;; Keywords: database mongodb sql
+
+;; This file is part of GNU Emacs.
+
+;; This file is free software; you can redistribute it and/or modify
+;; it under the terms of the GNU General Public License as published by
+;; the Free Software Foundation; either version 3, or (at your option)
+;; any later version.
+
+;; This program is distributed in the hope that it will be useful,
+;; but WITHOUT ANY WARRANTY; without even the implied warranty of
+;; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+;; GNU General Public License for more details.
+
+;; For a full copy of the GNU General Public License
+;; see <http://www.gnu.org/licenses/>.
+
+;;; Commentary:
+;;
+;; This package adds the MongoDB support to `collect'.
+;; By setting the `:type' property to 'mongodb to a database,
+;; you tell `collect' to use these methods and settings when
+;; selecting this database.
+
+;;; Code:
 
 (defcustom collect-mongodb-client "/usr/local/bin/mongo"
   "Executable MongoDB client path")
 
-(defcustom collect-collection-default-limit-mongodb 20
-  "Default number of documents to fetch in a SELECT query")
+(defcustom collect-mongodb-default-sort "_id: -1"
+  "Default sorting of documents")
 
-(defvar collect--collection-default-sort-mongodb "_id: -1")
+(defcustom collect-mongodb-default-limit 20
+  "Default number of documents to fetch in a find query")
 
+;; required functions for a database support
 
-;; required functions implementation for a database support
-
-(cl-defun collect--compose-query-mongodb (&key query document-id foreign-key)
-  "Build a single query from multiple arguments"
+(cl-defun collect--mongodb-compose-query (&key query document-id foreign-key)
+  "Build a single query from multiple arguments.
+If provided, QUERY must be a string in the MongoDB query syntax, without the surrounding '{}'.
+DOCUMENT-ID is the stringified ObjectId for a document to select.
+If FOREIGN_KEY is the field name used to query DOCUMENT-ID insteand of '_id'."
   (let ((query (or query "")))
     (if document-id
         (format "%s, %s: ObjectId(\"%s\")" query (or foreign-key "_id") document-id)
       query)))
 
-(defun collect--get-collection-names-mongodb (database)
+(defun collect--mongodb-get-collection-names (database)
   "Fetches collection names remotely."
-  (collect--json-query-mongodb database "db.getCollectionNames()"))
+  (collect--mongodb-json-query database "db.getCollectionNames()"))
 
-(defun collect--get-collection-projection-mongodb (database collection)
+(defun collect--mongodb-get-collection-projection (database collection)
   "Return the MongoDB string to use as a query projection, according to the collection's projection settings."
   (let* ((columns (collect--get-collection-columns database collection))
          (fields (mapcar (lambda (column) (format "\"%s\": 1" (plist-get column :name)))
                          columns)))
     (string-join fields ", ")))
 
-(defun collect--build-select-query-mongodb (collection projection &optional skip sort limit query)
+(defun collect--mongodb-build-select-query (collection projection &optional skip sort limit query)
   "Return the MongoDB string to use as a SELECT (i.e. a find) query."
   (format "db.%s.find({%s}, {%s}).sort({%s}).skip(%s).limit(%s)"
           collection
@@ -37,44 +72,40 @@
           projection
           (or sort "")
           (or skip 0)
-          (or limit collect-collection-default-limit-mongodb)))
+          (or limit 10)))
 
-(defun collect--find-by-id-mongodb (database collection id &optional field)
+(defun collect--mongodb-find-by-id (database collection id &optional field)
   "Find a document by its id and return it"
   (let ((query (format "db.%s.findOne({%s: ObjectId(\"%s\")})" collection (or field "_id") id)))
-    (collect--raw-query-mongodb database query)))
+    (collect--mongodb-raw-query database query)))
 
-(defun collect--run-select-query-mongodb (database query &optional raw)
+(defun collect--mongodb-run-select-query (database query &optional raw)
   "Run find the query as a mongodb cursor and returns the output as a string JSON list"
   (let ((query (format "var cursor = %s; print(\"\[\"); while(cursor.hasNext()) { printjson(cursor.next()); if (cursor.hasNext()) {print(\",\");}} print(\"]\");" query)))
     (if raw
-        (collect--raw-query-mongodb database query)
-      (collect--json-query-mongodb database query))))
+        (collect--mongodb-raw-query database query)
+      (collect--mongodb-json-query database query))))
 
-(defun collect--extract-data-documents-mongodb (database collection data)
+(defun collect--mongodb-extract-data-documents (database collection data)
   "Return a list of extracted data according to the collection's columns settings.
 data: a JSON list of documents"
-  (mapcar (apply-partially 'collect--extract-data-document-mongodb database collection) data))
+  (mapcar (apply-partially 'collect--mongodb-extract-data-document database collection) data))
 
-(defun collect--show-document-mongodb (database collection document-id &optional field)
+(defun collect--mongodb-show-document (database collection document-id &optional field)
   "Fetch and display a document in a separate buffer"
   (let* ((buffer (get-buffer-create (format "collect: %s (%s)" collection document-id)))
-         (document (collect--find-by-id-mongodb database collection document-id field)))
-
+         (document (collect--mongodb-find-by-id database collection document-id field)))
     (switch-to-buffer buffer)
     (toggle-read-only -1)
-
     (erase-buffer)
     (insert document)
     (beginning-of-buffer)
-
     (json-mode)
     (toggle-read-only 1)))
 
-
 ;; internal functions
 
-(defun collect--requote-output-mongodb (output)
+(defun collect--mongodb-requote-output (output)
   "Adds quotes around ObjectId in OUTPUT.
 When mongo outputs json, it has unquoted ObjectIds in it that
 emacs cannot interpret as json. "
@@ -87,15 +118,15 @@ emacs cannot interpret as json. "
      "\"ISODate(\\\\\"\\1\\\\\")\""
      output)))
 
-(defun collect--json-query-mongodb (database query)
+(defun collect--mongodb-json-query (database query)
   "Run the query against the datatable and parse the result as JSON."
-  (let* ((output (collect--raw-query-mongodb database query))
+  (let* ((output (collect--mongodb-raw-query database query))
          (json-object-type 'hash-table)
          (json-array-type 'list)
          (json-key-type 'string))
-    (json-read-from-string (collect--requote-output-mongodb output))))
+    (json-read-from-string (collect--mongodb-requote-output output))))
 
-(defun collect--raw-query-mongodb (database query)
+(defun collect--mongodb-raw-query (database query)
   "Run the query against the datatable and return the result as a string."
   (let* ((host (collect--get-database-property :host database))
          (user (collect--get-database-property :user database))
@@ -114,21 +145,21 @@ emacs cannot interpret as json. "
           (message "[MONGODB] RESPONSE: %s" output))
         output))))
 
-(defun collect--extract-data-document-mongodb (database collection row)
+(defun collect--mongodb-extract-data-document (database collection row)
   "Return a list of columns for a single document, according to the collection's columns settings.
 The _id row is always added as the first element."
-  (let* ((_id (collect--get-document-field-mongodb "_id" row))
+  (let* ((_id (collect--mongodb-get-document-field "_id" row))
          (columns (collect--get-collection-columns database collection))
-         (fields (mapcar (apply-partially 'collect--value-template-mongodb row) columns)))
-    (append (list (collect--value-pretty-mongodb _id)) fields)))
+         (fields (mapcar (apply-partially 'collect--mongodb-value-template row) columns)))
+    (append (list (collect--mongodb-value-pretty _id)) fields)))
 
-(defun collect--value-template-mongodb (row field)
+(defun collect--mongodb-value-template (row field)
   "Format a single field value and escape characters not supported by json-mode."
   (let* ((field (plist-get field :name))
-        (value (collect--get-document-field-mongodb field row)))
-    (collect--value-pretty-mongodb value)))
+        (value (collect--mongodb-get-document-field field row)))
+    (collect--mongodb-value-pretty value)))
 
-(defun collect--get-document-field-mongodb (field document)
+(defun collect--mongodb-get-document-field (field document)
   "Returns field value in document. Supports dotted fields for accessing nested documents"
   (let* ((parts (split-string field "\\\." t))
          (subdocument (gethash (car parts) document)))
@@ -136,14 +167,14 @@ The _id row is always added as the first element."
              (string-equal (type-of subdocument) "hash-table"))
         ;; we need to go deeper
         (progn
-          (collect--get-document-field-mongodb
+          (collect--mongodb-get-document-field
             (string-join (cdr parts) ".") ; rebuild dotted path, skipping the first one
             subdocument)
           )
       ;; we found what we're looking for
       (gethash field document))))
 
-(defun collect--value-pretty-mongodb (value)
+(defun collect--mongodb-value-pretty (value)
   "Escape characters not supported by json-mode."
   (if (eq (type-of value) 'string)
       (replace-regexp-in-string
@@ -154,3 +185,4 @@ The _id row is always added as the first element."
   )
 
 (provide 'collect-mongodb)
+;;; collect-mongodb.el ends here

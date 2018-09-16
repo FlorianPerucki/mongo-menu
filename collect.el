@@ -1,6 +1,98 @@
-;; -*- lexical-binding: t -*-
+;;; collect.el --- Read quickly from multiple databases -*- lexical-binding: t -*-
 
-;; TODO https://emacs.stackexchange.com/questions/17130/data-structure-for-triplet-3-tuple
+;; Copyright (C) 2018-2019  Free Software Foundation, Inc.
+
+;; Author: Florian Perucki <florian@perucki.fr>
+;; URL: https://github.com/florianperucki/collect
+;; Version: 0.0.1
+;; Package-Requires: ((emacs "24.1") (ivy "0.10.0") (hydra 0.14.0))
+;; Keywords: database mongodb sql
+
+;; This file is part of GNU Emacs.
+
+;; This file is free software; you can redistribute it and/or modify
+;; it under the terms of the GNU General Public License as published by
+;; the Free Software Foundation; either version 3, or (at your option)
+;; any later version.
+
+;; This program is distributed in the hope that it will be useful,
+;; but WITHOUT ANY WARRANTY; without even the implied warranty of
+;; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+;; GNU General Public License for more details.
+
+;; For a full copy of the GNU General Public License
+;; see <http://www.gnu.org/licenses/>.
+
+;;; Commentary:
+;;
+;; This package lets you access data from your databases of potentially
+;; multiple types (MongoDB, SQL, ElasticSearch).
+;;
+;; IMPORTANT: This package is thought for read-only operations, and no
+;; CRUD operation (other than the Read part) is initially provided.
+;;
+;; The typical use-case for this package is when you have one or more
+;; (production) datatables which you often need to query for quick
+;; information gathering. For instance, if you need to see if you have
+;; any open support ticket for a specific client, you could either go to
+;; your company's Web interface (if there is even one for this purpose),
+;; and click on multiple menus to get what you're looking for. Or you could
+;; log-in directly to your database (with a read-only user, of course), get
+;; your client's ID in the clients collection, and then run a query against
+;; the tickets collection using
+;; the client ID.
+;;
+;; With this package you can do the following:
+;;
+;; (collect-setup
+;;  ;; configure how to access your database
+;;  (collect-add-database "mydb"
+;;                        :key "m"
+;;                        :type 'mongodb
+;;                        :host "127.0.0.1:27828/mydb"
+;;                        :user "readonly"
+;;                        :password "passw0rd")
+;;  ;; configure the 'clients' collection for the 'mydb' database
+;;  (collect-configure-collection
+;;     "mydb"
+;;     "clients"
+;;     :key "s"
+;;     ;; Query projection; columns to display with `ivy'.
+;;     ;; Only these fields will be requested from the database.
+;;     :columns '((:name "_id" :width 30)
+;;                (:name "name" :width 50)
+;;                (:name "email" :width 30)
+;;                (:name "some.nested.field" :width 20))
+;;     ;; Available actions on a single row
+;;     :actions '((:name "Tickets"
+;;                :key "t"
+;;                :collection "tickets"
+;;                ;; the '_id' field of the current row matches
+;;                ;; the 'client' field in the 'tickets' collection
+;;                :foreign "client"
+;;                :query "status: \"open\""
+;;                :sort "_id: -1"
+;;                :limit 5))))
+;;
+;; After running the above setup, you may '<prefix> m s' to display
+;; a list of your clients, use the `ivy' prompt to find the one you are
+;; looking for, and then press 'M-o t' to see some open tickets for this
+;; client (M-o being the `ivy' prefix to access commands). If you want to
+;; see the full document of a specific ticket you can press <RET> or 'M-o o'
+;; and it will be displayed in a new buffer.
+;;
+;; Check the documentation to see how to create more complex queries, like
+;; cross-databases queries.
+;;
+;; If you don't want to go through the database->collection->etc. selection
+;; process, you can define a key binding of your own like this:
+;;
+;; (global-set-key (kbd "M-m c s")
+;;                 (lambda ()
+;;                   (interactive)
+;;                   (collect-display "mydb" :collection "tickets")))
+
+;;; Code:
 
 (defvar collect-selector 'ivy)
 (defvar collect--debug nil)
@@ -15,19 +107,13 @@
 (require 'collect-hydra)
 (require 'collect-mongodb)
 
-;;
-;; public - setup
-;;
-
 ;;;###autoload
-(defun collect/setup (&rest body)
+(defun collect-setup (&rest body)
   (collect--build-hydras))
 
 ;;;###autoload
-(cl-defun collect/add-database (database &key key type host user password)
+(cl-defun collect-add-database (database &key key type host user password)
   "Register a database in collect"
-  (interactive)
-
   ;; remove any existing entry for this database
   (when (assoc database collect--databases)
     (setq collect--databases
@@ -45,9 +131,8 @@
                              :password password))))))
 
 ;;;###autoload
-(cl-defun collect/configure-collection (database collection &key key columns actions sort limit queries)
+(cl-defun collect-configure-collection (database collection &key key columns actions sort limit queries)
   "Register a collection to an existing database"
-  (interactive)
   (let* ((database-object (collect--get-database database))
          (value (cons collection (list
                                   :key key
@@ -60,21 +145,38 @@
     (collect--set-property :collections value database-object t)))
 
 ;;;###autoload
-(cl-defun collect/display (database &key collection skip query limit sort foreign-key document-id single)
+(cl-defun collect-display (database &key collection skip query limit sort foreign-key document-id single)
   "Build a query, run it and display its output, either a list of rows or a single document if documentp is non-nil."
-  (interactive)
   (if single
       ;; show a single document
       (let ((show-document (collect--get-database-function "show-document" database)))
         (funcall show-document database collection document-id foreign-key))
     ;; display rows
     (let* ((query (collect--compose-query database
-                                             :query query
-                                             :foreign-key foreign-key
-                                             :document-id document-id))
+                                          :query query
+                                          :foreign-key foreign-key
+                                          :document-id document-id))
            (data (collect--build-and-run-select-query database collection skip query limit sort))
            (entries (mapcar (apply-partially 'collect--format-entry-document database collection) data)))
       (collect--display :database database :collection collection :entries entries))))
+
+;;
+;; public - commands
+;;
+
+(defun collect-show-databases ()
+  "Lists your defined databases"
+  (interactive)
+  (let ((display-function (intern (format "collect--%S-databases" collect-selector))))
+    (funcall display-function collect--databases)))
+
+(defun collect-show-collections (database &optional defined)
+  (interactive "sDatabase: ")
+  (let* ((collections (collect--get-collection-names database defined))
+         (display-function (intern (format "collect--%S-collections" collect-selector))))
+    (funcall display-function database collections)))
+
+;; actions
 
 ;;;###autoload
 (defun collect--configure-actions (database collection actions)
@@ -87,34 +189,6 @@ is targetting a different database/collection than the current one."
                        (plist-put action :collection collection))
                      action))
           actions))
-;; (defun collect--configure-queries (queries)
-;;   "Format a list of queries customized with collect/configure-collection, for internal use"
-;;   (mapcar (lambda (query)
-;;             (let ((key (plist-get query :key)))
-;;               (cons key query))) queries))
-;;
-;; public - commands
-;;
-
-(defun collect--format-entry-document (database collection row)
-  "Format a data ROW so it can be displayed in the selected front tool (ivy)"
-  (let ((format-function (intern (format "collect--format-entry-document-%S" collect-selector))))
-    (funcall format-function database collection row)))
-
-(defun collect-show-databases ()
-  "Lists your defined databases"
-  (interactive)
-  (let ((display-function (intern (format "collect--databases-%S" collect-selector))))
-    (funcall display-function collect--databases)))
-
-(defun collect-show-collections (database &optional defined)
-  (interactive "sDatabase: ")
-  (let* ((collections (collect--get-collection-names database defined))
-         (display-function (intern (format "collect--collections-%S" collect-selector))))
-    (funcall display-function database collections)))
-
-
-;; actions
 
 (defun collect--run-action (action entry)
   "Execute an ACTION on an document ENTRY.
@@ -145,15 +219,15 @@ read: execute a read operation"
          (projection (plist-get action :projection))
          (query (plist-get action :query)))
     (if (equal action-type 'read)
-        (collect/display database
-                            :collection collection
-                            :skip skip
-                            :query query
-                            :limit limit
-                            :sort sort
-                            :foreign-key foreign-key
-                            :document-id document-id
-                            :single single)
+        (collect-display database
+                         :collection collection
+                         :skip skip
+                         :query query
+                         :limit limit
+                         :sort sort
+                         :foreign-key foreign-key
+                         :document-id document-id
+                         :single single)
       (error "Unknown action type %S" action-type))))
 
 (cl-defun collect--compose-query (database &key query document-id foreign-key)
@@ -168,27 +242,25 @@ read: execute a read operation"
   "Action to execute on any row: add the row ID to the kill ring"
   (kill-new (get-text-property 0 :id row)))
 
-
 ;; getting customizable option value
 
 (defun collect--get-collection-columns (database collection)
   "Return a list of columns for the specified collection."
   (let ((columns (collect--get-collection-property :columns database collection)))
+    ;; TODO: fetch default columns with database type file
     (or columns collect-collection-default-columns)))
 
-(defun collect--get-collection-sort (database collection)
-  "Get and format the sorting preference for this database's collection"
-  (let* ((sort (collect--get-collection-property :sort database collection))
-         (database-type (collect--get-database-property :type database))
-         (default-sort (symbol-value (intern (format "collect--collection-default-sort-%S" database-type)))))
-    (or sort default-sort)))
-
 (defun collect--get-collection-limit (database collection)
-  "This will get and format the maximum documents to fetch for this database's collection"
-  (let* ((limit (collect--get-collection-property :limit database collection))
-         (database-type (collect--get-database-property :type database))
-         (default-limit (symbol-value (intern (format "collect-collection-default-limit-%S" database-type)))))
-    (or limit default-limit)))
+  "Return the correct result limit for this collection"
+  (or (collect--get-collection-property :limit database collection)
+      (collect--get-database-property :limit database)
+      (collect--get-database-var "default-limit" database)))
+
+(defun collect--get-collection-sort (database collection)
+  "Return the correct sorting for this collection"
+  (or (collect--get-collection-property :sort database collection)
+      (collect--get-database-property :sort database)
+      (collect--get-database-var "default-sort" database)))
 
 (defun collect--get-collection-names (database &optional defined)
   "Return a list of collection names.
@@ -207,65 +279,67 @@ column: plist"
 
 ;; database query
 
+(defun collect--get-database-var (var-name database)
+  "Return variable var-name of DATABASE.
+DATABASE: string name of a configured database."
+  (let ((database-type (collect--get-database-property :type database)))
+    (symbol-value (intern (format "collect-%S-%s" database-type var-name)))))
+
+(defun collect--get-database-function (function-name database)
+  "Return function function-name, prefixed with \"collect--\" for a database type.
+DATABASE: string name of a configured database"
+  (let ((database-type (collect--get-database-property :type database)))
+    (intern (format "collect--%S-%s" database-type function-name))))
+
 (defun collect--build-and-run-select-query (database collection &optional skip query limit sort)
   "Run query on collection and return extracted results"
-  ;; TODO make it a database-specific method
   (let* ((query (collect--build-select-query database collection skip query limit sort))
          (data (collect--run-select-query database query)))
     (collect--extract-data-documents database collection data)))
 
 (defun collect--build-select-query (database collection &optional skip query limit sort)
   "Return a SELECT (or equivalent) query (string)."
-  (let* ((database-type (collect--get-database-property :type database))
-         (sort (or sort (collect--get-collection-sort database collection)))
+  (let* ((sort (or sort (collect--get-collection-sort database collection)))
          (limit (or limit (collect--get-collection-limit database collection)))
-         (get-projection (intern (format "collect--get-collection-projection-%s" database-type)))
+         (get-projection (collect--get-database-function "get-collection-projection" database))
          (projection (funcall get-projection database collection))
-         (build-query (intern (format "collect--build-select-query-%S" database-type))))
+         (build-query (collect--get-database-function "build-select-query" database)))
     (funcall build-query collection projection skip sort limit query)))
 
 (defun collect--run-select-query (database query)
   "Run a query against the given database."
-  (let* ((database-type (collect--get-database-property :type database))
-         (run-query (intern (format "collect--run-select-query-%S" database-type))))
+  (let* ((run-query (collect--get-database-function "run-select-query" database)))
     (funcall run-query database query)))
 
 (defun collect--get-collection-names-remote (database)
   "Fetch all the existing collection names remotely."
-  (let* ((type (collect--get-database-property :type "pricingassistant2"))
-         (display-function (intern (format "collect--get-collection-names-%S" type))))
-    (funcall display-function database)))
+  (let* ((display-function (collect--get-database-function "get-collection-name" database))
+    (funcall display-function database))))
 
 (defun collect--extract-data-documents (database collection data)
   "Convert data that was fetched from a collection to an internal comprehensive format."
   (let ((extract (collect--get-database-function "extract-data-documents" database)))
     (funcall extract database collection data)))
 
-(defun collect--get-database-function (function-name database)
-  "Return internal function function-name, prefixed with \"collect--\" for a database type.
-If database is a symbol, it is considered as the database type, e.g. 'mongodb
-Otherwise it must be a string matching a configured database name."
-  (let ((database-type (if (symbolp database)
-                           database
-                         (collect--get-database-property :type database))))
-    (intern (format "collect--%s-%S" function-name database-type))))
-
 ;; accessing front methods
+
+(defun collect--get-front-function (function-name)
+  (intern (format "collect--%S-%s" collect-selector function-name)))
 
 (defun collect--get-actions (&optional database collection)
   "Return actions for the document type currently being displayed
 collections if collection is nil, documents if collection is non-nil"
-  (let ((get-actions (intern (format "collect--get-actions-%S" collect-selector))))
+  (let ((get-actions (collect--get-front-function "get-actions")))
     (funcall get-actions database collection)))
 
 (defun collect--get-prompt (database &optional collection)
   "Get formatted prompt for database and collection if provided"
-  (let ((get-prompt (intern (format "collect--get-prompt-%S" collect-selector))))
+  (let ((get-prompt (collect--get-front-function "get-prompt")))
     (funcall get-prompt database collection)))
 
 (defun collect--display-prompt (prompt entries actions)
   "Run front-end command to display results"
-  (let ((display (intern (format "collect--display-%S" collect-selector))))
+  (let ((display (collect--get-front-function "display")))
     (funcall display prompt entries actions)))
 
 ;; helpers
@@ -317,7 +391,6 @@ property is already set the new value is appended."
     (funcall requote output)))
 
 (defun collect--show-document (row &optional projection)
-
   "Action to execute on any row: add the row ID to the kill ring"
   (let* ((database (get-text-property 0 :database row))
          (collection (get-text-property 0 :collection row))
@@ -325,4 +398,10 @@ property is already set the new value is appended."
          (show-document (collect--get-database-function "show-document" database)))
     (funcall show-document database collection document-id)))
 
+(defun collect--format-entry-document (database collection row)
+  "Format a data ROW so it can be displayed in the selected front tool (ivy)"
+  (let ((format-function (collect--get-front-function "format-entry-document")))
+    (funcall format-function database collection row)))
+
 (provide 'collect)
+;;; collect.el ends here
