@@ -91,7 +91,7 @@ If FOREIGN_KEY is the field name used to query DOCUMENT-ID insteand of '_id'."
 data: a JSON list of documents"
   (mapcar (apply-partially 'collect--mongodb-extract-data-document database collection) data))
 
-(defun collect--mongodb-show-document (database collection document-id &optional field)
+(cl-defun collect--mongodb-show-document (database collection document-id &key field projection)
   "Fetch and display a document in a separate buffer"
   (let* ((buffer (get-buffer-create (format "collect: %s (%s)" collection document-id)))
          (document (collect--mongodb-find-by-id database collection document-id field)))

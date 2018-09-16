@@ -142,16 +142,21 @@
                             :actions (collect--configure-actions database name actions)
                             :sort sort
                             :limit limit
-                            :queries queries))))
+                            :queries (collect--configure-queries database name queries)))))
     (collect--set-property :collections value database-object t)))
 
 ;;;###autoload
-(cl-defun collect-display (&key database collection skip query limit sort foreign-key document-id single query-key)
+(defun collect-collection-query (database collection key)
+  (let* ((query (assoc key (collect--get-collection-property :queries database collection))))
+    (collect--run-query (cdr query))))
+
+;;;###autoload
+(cl-defun collect-display (&key database collection skip query limit sort foreign-key document-id single projection)
   "Build a query, run it and display its output, either a list of rows or a single document if documentp is non-nil."
   (if single
       ;; show a single document
       (let ((show-document (collect--get-database-function "show-document" database)))
-        (funcall show-document database collection document-id foreign-key))
+        (funcall show-document database collection document-id :field foreign-key :projection projection))
     ;; display rows
     (let* ((query (collect--compose-query database
                                           :query query
@@ -191,45 +196,46 @@ is targetting a different database/collection than the current one."
                      action))
           actions))
 
-(defun collect--run-action (action entry)
-  "Execute an ACTION on an document ENTRY.
+;;;###autoload
+(defun collect--configure-queries (database collection queries)
+  "Create an alist where the key is the query key. Also ensure database and collection
+are populated."
+  (mapcar #'(lambda (query)
+              (cons
+               (plist-get query :key)
+               (progn (when (not (plist-get query :database))
+                        (plist-put query :database database))
+                      (when (not (plist-get query :collection))
+                        (plist-put query :collection collection))
+                      query)))
+          queries))
+
+(defun collect--run-query (query)
+  "Execute a user-defined QUERY.
 
 The executed action depends on the ACTION type property:
 
 read: execute a read operation"
-  (let* ((action-type (or (plist-get action :type) 'read))
-         ;; target database for action, defaults to current
-         (database (or
-                    (plist-get action :database)
-                    (get-text-property 0 :database entry)))
-         ;; target collection for action, defaults to current
-         (collection (or
-                      (plist-get action :collection)
-                      (get-text-property 0 :collection entry)))
-         ;; document unique id
-         (document-id (get-text-property 0 :id entry))
-         ;; if provided, this is the field name to use instead of the
-         ;; database default unique id field
-         (foreign-key (plist-get action :foreign))
-         ;; if t, the query returns a single document that we'll show in a new buffer
-         (single (plist-get action :single))
+  (let* ((query-type (or (plist-get query :type) 'read))
+         ;; target database for query, defaults to current
+         (database (plist-get query :database))
+         ;; target collection for query, defaults to current
+         (collection (plist-get query :collection))
          ;; usual query parameters
-         (sort (plist-get action :sort))
-         (limit (plist-get action :limit))
-         (skip (plist-get action :skip))
-         (projection (plist-get action :projection))
-         (query (plist-get action :query)))
-    (if (equal action-type 'read)
+         (sort (plist-get query :sort))
+         (limit (plist-get query :limit))
+         (skip (plist-get query :skip))
+         (projection (plist-get query :projection))
+         (query (plist-get query :query)))
+    (if (equal query-type 'read)
         (collect-display :database database
                          :collection collection
+                         :projection projection
                          :skip skip
                          :query query
                          :limit limit
-                         :sort sort
-                         :foreign-key foreign-key
-                         :document-id document-id
-                         :single single)
-      (error "Unknown action type %S" action-type))))
+                         :sort sort)
+      (error "Unknown query type %S" query-type))))
 
 (cl-defun collect--compose-query (database &key query document-id foreign-key)
   "Build a single query from multiple arguments"

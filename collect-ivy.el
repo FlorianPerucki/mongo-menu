@@ -167,7 +167,47 @@ If defined is non-nil, not database fetch is done and only user-defined collecti
 (defun collect--ivy-build-action (action)
   (let* ((key (plist-get action :key))
          (name (plist-get action :name)))
-    (list key (apply-partially 'collect--run-action action) name)))
+    (list key (apply-partially 'collect--ivy-run-action action) name)))
+
+(defun collect--ivy-run-action (action entry)
+  "Execute an ACTION on a single document ENTRY.
+The executed action depends on the ACTION type property:
+
+read: execute a read operation"
+  (let* ((action-type (or (plist-get action :type) 'read))
+         ;; target database for action, defaults to current
+         (database (or
+                    (plist-get action :database)
+                    (get-text-property 0 :database entry)))
+         ;; target collection for action, defaults to current
+         (collection (or
+                      (plist-get action :collection)
+                      (get-text-property 0 :collection entry)))
+         ;; document unique id
+         (document-id (get-text-property 0 :id entry))
+         ;; if provided, this is the field name to use instead of the
+         ;; database default unique id field
+         (foreign-key (plist-get action :foreign))
+         ;; if t, the query returns a single document that we'll show in a new buffer
+         (single (plist-get action :single))
+         ;; usual query parameters
+         (sort (plist-get action :sort))
+         (limit (plist-get action :limit))
+         (skip (plist-get action :skip))
+         (projection (plist-get action :projection))
+         (query (plist-get action :query)))
+    (if (equal action-type 'read)
+        (collect-display :database database
+                         :collection collection
+                         :projection projection
+                         :skip skip
+                         :query query
+                         :limit limit
+                         :sort sort
+                         :foreign-key foreign-key
+                         :document-id document-id
+                         :single single)
+      (error "Unknown action type %S" action-type))))
 
 (defun collect--ivy-action-show-documents (database collection &optional skip query limit sort)
   "Fetch and display collection's data, filtered by query if provided"

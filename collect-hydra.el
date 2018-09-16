@@ -56,7 +56,7 @@
 
 (defun collect--hydra-build-queries (database collection)
   "Build and display a hydra proposing actions for the previously selected collection"
-  (let* ((queries (collect--get-collection-property :queries database collection))
+  (let* ((queries (mapcar 'cdr (collect--get-collection-property :queries database collection)))
          (default-queries (list
                            `("1" (lambda () (interactive) (collect--action-show-documents-ivy ,database ,collection)) "All")))
          (queries-heads
@@ -64,26 +64,13 @@
            (lambda (query)
              (let* ((key (plist-get query :key))
                     (name (plist-get query :name)))
-               (list key (collect--hydra-build-query database collection query) name :exit t)))
+               (list key `(collect-collection-query ,database ,collection ,key) name :exit t)))
            queries))
          (queries-heads (append (or default-queries (list)) queries-heads)))
     (eval `(defhydra collect--hydra-tmp (:color blue)
              "Collect"
              ,@queries-heads))
     (collect--hydra-tmp/body)))
-
-(defun collect--hydra-build-query (database collection action)
-  "Build a hydra callback for the ACTION head"
-  (let* ((skip (plist-get action :skip))
-         (query (plist-get action :query))
-         (limit (plist-get action :limit))
-         (sort (plist-get action :sort)))
-    `(collect-display :database ,database
-                      :collection ,collection
-                      :skip ,skip
-                      :query ,query
-                      :limit ,limit
-                      :sort ,sort)))
 
 (provide 'collect-hydra)
 ;;; collect-hydra.el ends here
