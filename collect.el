@@ -46,7 +46,7 @@
 ;;
 ;; (collect-setup
 ;;  ;; configure how to access your database
-;;  (collect-add-database "mydb"
+;;  (collect-add-database :name "mydb"
 ;;                        :key "m"
 ;;                        :type 'mongodb
 ;;                        :host "127.0.0.1:27828/mydb"
@@ -54,8 +54,8 @@
 ;;                        :password "passw0rd")
 ;;  ;; configure the 'clients' collection for the 'mydb' database
 ;;  (collect-configure-collection
-;;     "mydb"
-;;     "clients"
+;;     :database "mydb"
+;;     :name "clients"
 ;;     :key "s"
 ;;     ;; Query projection; columns to display with `ivy'.
 ;;     ;; Only these fields will be requested from the database.
@@ -90,7 +90,7 @@
 ;; (global-set-key (kbd "M-m c s")
 ;;                 (lambda ()
 ;;                   (interactive)
-;;                   (collect-display "mydb" :collection "tickets")))
+;;                   (collect-display :database "mydb" :collection "tickets")))
 
 ;;; Code:
 
@@ -112,18 +112,19 @@
   (collect--build-hydras))
 
 ;;;###autoload
-(cl-defun collect-add-database (database &key key type host user password)
+(cl-defun collect-add-database (&key name key type host user password)
   "Register a database in collect"
   ;; remove any existing entry for this database
-  (when (assoc database collect--databases)
+  (when (assoc name collect--databases)
     (setq collect--databases
-          (delq (assoc database collect--databases) collect--databases)))
+          (delq (assoc name collect--databases) collect--databases)))
 
   ;; add entry for this database
   (setq collect--databases
         (append collect--databases
-                (list (cons database
+                (list (cons name
                             (list
+                             :name name
                              :key key
                              :type type
                              :host host
@@ -131,21 +132,21 @@
                              :password password))))))
 
 ;;;###autoload
-(cl-defun collect-configure-collection (database collection &key key columns actions sort limit queries)
+(cl-defun collect-configure-collection (&key database name key columns actions sort limit queries)
   "Register a collection to an existing database"
   (let* ((database-object (collect--get-database database))
-         (value (cons collection (list
-                                  :key key
-                                  :name collection
-                                  :columns columns
-                                  :actions (collect--configure-actions database collection actions)
-                                  :sort sort
-                                  :limit limit
-                                  :queries queries))))
+         (value (cons name (list
+                            :key key
+                            :name name
+                            :columns columns
+                            :actions (collect--configure-actions database name actions)
+                            :sort sort
+                            :limit limit
+                            :queries queries))))
     (collect--set-property :collections value database-object t)))
 
 ;;;###autoload
-(cl-defun collect-display (database &key collection skip query limit sort foreign-key document-id single)
+(cl-defun collect-display (&key database collection skip query limit sort foreign-key document-id single query-key)
   "Build a query, run it and display its output, either a list of rows or a single document if documentp is non-nil."
   (if single
       ;; show a single document
@@ -219,7 +220,7 @@ read: execute a read operation"
          (projection (plist-get action :projection))
          (query (plist-get action :query)))
     (if (equal action-type 'read)
-        (collect-display database
+        (collect-display :database database
                          :collection collection
                          :skip skip
                          :query query

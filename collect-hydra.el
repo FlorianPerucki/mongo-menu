@@ -78,12 +78,12 @@
          (query (plist-get action :query))
          (limit (plist-get action :limit))
          (sort (plist-get action :sort)))
-    `(collect-display ,database
-                         :collection ,collection
-                         :skip ,skip
-                         :query ,query
-                         :limit ,limit
-                         :sort ,sort)))
+    `(collect-display :database ,database
+                      :collection ,collection
+                      :skip ,skip
+                      :query ,query
+                      :limit ,limit
+                      :sort ,sort)))
 
 (provide 'collect-hydra)
 ;;; collect-hydra.el ends here

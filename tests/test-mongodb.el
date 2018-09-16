@@ -4,14 +4,14 @@
 (defun run-query-test (test)
   (let (collect--databases (list))
     (collect-add-database
-     "db1"
+     :name "db1"
      :type 'mongodb
      :host "host1"
      :user "user"
      :password "password")
     (collect-configure-collection
-     "db1"
-     "collection1"
+     :database "db1"
+     :name "collection1"
      :columns (list
                '(:name "_id" :width 30)
                '(:name "name" :with 50)

@@ -21,15 +21,15 @@
 (defun configure-test-common ()
   "Configure initial state"
   (collect-add-database
-     "db1"
+     :name "db1"
      :key "1"
      :type 'mongodb
      :host "host1"
      :user "user"
      :password "password")
     (collect-configure-collection
-     "db1"
-     "collection1"
+     :database "db1"
+     :name "collection1"
      :key "c"
      :columns (list
                '(:name "_id" :width 30)
@@ -66,8 +66,8 @@
 ;;   (run-query-test-common
 ;;    (lambda ()
 ;;      (collect-configure-collection
-;;       "db1"
-;;       "collection1"
+;;       :database "db1"
+;;       :name "collection1"
 ;;       :key "c"
 ;;       :columns (list
 ;;                 '(:name "_id" :width 30)
