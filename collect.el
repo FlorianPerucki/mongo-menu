@@ -1,6 +1,6 @@
 ;;; collect.el --- Read quickly from multiple databases -*- lexical-binding: t -*-
 
-;; Copyright (C) 2018-2019  Free Software Foundation, Inc.
+;; Copyright (C) 2018 Florian Perucki
 
 ;; Author: Florian Perucki <florian@perucki.fr>
 ;; URL: https://github.com/florianperucki/collect
@@ -8,89 +8,32 @@
 ;; Package-Requires: ((emacs "24.1") (ivy "0.10.0") (hydra 0.14.0))
 ;; Keywords: database mongodb sql
 
-;; This file is part of GNU Emacs.
+;; This file is not part of GNU Emacs.
 
-;; This file is free software; you can redistribute it and/or modify
+;; This file is free software: you can redistribute it and/or modify
 ;; it under the terms of the GNU General Public License as published by
-;; the Free Software Foundation; either version 3, or (at your option)
-;; any later version.
+;; the Free Software Foundation, either version 3 of the License, or
+;; (at your option) any later version.
 
-;; This program is distributed in the hope that it will be useful,
+;; This file is distributed in the hope that it will be useful,
 ;; but WITHOUT ANY WARRANTY; without even the implied warranty of
-;; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+;; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
 ;; GNU General Public License for more details.
 
-;; For a full copy of the GNU General Public License
-;; see <http://www.gnu.org/licenses/>.
+;; You should have received a copy of the GNU General Public License
+;; along with this file. If not, see <https://www.gnu.org/licenses/>.
 
 ;;; Commentary:
 ;;
-;; This package lets you access data from your databases of potentially
-;; multiple types (MongoDB, SQL, ElasticSearch).
-;;
+;; This package lets you access data from your databases using pre-
+;; configured queries.
+
 ;; IMPORTANT: This package is thought for read-only operations, and no
 ;; CRUD operation (other than the Read part) is initially provided.
+
+;; Currently supported databases are:
 ;;
-;; The typical use-case for this package is when you have one or more
-;; (production) datatables which you often need to query for quick
-;; information gathering. For instance, if you need to see if you have
-;; any open support ticket for a specific client, you could either go to
-;; your company's Web interface (if there is even one for this purpose),
-;; and click on multiple menus to get what you're looking for. Or you could
-;; log-in directly to your database (with a read-only user, of course), get
-;; your client's ID in the clients collection, and then run a query against
-;; the tickets collection using
-;; the client ID.
-;;
-;; With this package you can do the following:
-;;
-;; (collect-setup
-;;  ;; configure how to access your database
-;;  (collect-add-database :name "mydb"
-;;                        :key "m"
-;;                        :type 'mongodb
-;;                        :host "127.0.0.1:27828/mydb"
-;;                        :user "readonly"
-;;                        :password "passw0rd")
-;;  ;; configure the 'clients' collection for the 'mydb' database
-;;  (collect-configure-collection
-;;     :database "mydb"
-;;     :name "clients"
-;;     :key "s"
-;;     ;; Query projection; columns to display with `ivy'.
-;;     ;; Only these fields will be requested from the database.
-;;     :columns '((:name "_id" :width 30)
-;;                (:name "name" :width 50)
-;;                (:name "email" :width 30)
-;;                (:name "some.nested.field" :width 20))
-;;     ;; Available actions on a single row
-;;     :actions '((:name "Tickets"
-;;                :key "t"
-;;                :collection "tickets"
-;;                ;; the '_id' field of the current row matches
-;;                ;; the 'client' field in the 'tickets' collection
-;;                :foreign "client"
-;;                :query "status: \"open\""
-;;                :sort "_id: -1"
-;;                :limit 5))))
-;;
-;; After running the above setup, you may '<prefix> m s' to display
-;; a list of your clients, use the `ivy' prompt to find the one you are
-;; looking for, and then press 'M-o t' to see some open tickets for this
-;; client (M-o being the `ivy' prefix to access commands). If you want to
-;; see the full document of a specific ticket you can press <RET> or 'M-o o'
-;; and it will be displayed in a new buffer.
-;;
-;; Check the documentation to see how to create more complex queries, like
-;; cross-databases queries.
-;;
-;; If you don't want to go through the database->collection->etc. selection
-;; process, you can define a key binding of your own like this:
-;;
-;; (global-set-key (kbd "M-m c s")
-;;                 (lambda ()
-;;                   (interactive)
-;;                   (collect-display :database "mydb" :collection "tickets")))
+;; - MongoDB
 
 ;;; Code:
 
