@@ -30,6 +30,7 @@
 (require 'subr-x)
 (require 'json)
 (require 'hydra)
+(require 'el-mock)
 (load-file "collect-hydra.el")
 (load-file "collect-mongodb.el")
 (load-file "collect-ivy.el")
@@ -145,11 +146,6 @@
            (length (collect--hydra-databases-heads))
            1))
 
-  (defvar collect--test-result-query nil)
-  (defvar collect--test-result-prompt nil)
-  (defvar collect--test-result-entries nil)
-  (defvar collect--test-result-query actions)
-
   (global-set-key (kbd "C-c c") 'hydra-collect/body)
 
   (defun collect-hydra-keys (keys)
@@ -158,30 +154,19 @@
      (vconcat (kbd "C-c c")
               (kbd keys))))
 
-  (defun collect--mongodb-raw-query (database query)
-    "Mock MongoDB response"
-    "[{\"_id\": 123, \"name\": \"foo\"}]")
-
-  (defun collect--display-prompt (prompt entries actions)
-    "Mock ivy entrypoint"
-    (setq collect--test-result-prompt prompt)
-    (setq collect--test-result-entries entries)
-    (setq collect--test-result-actions actions))
-
-  ;; Run hydra: select DB (1), collection1 (c), custom query (p)
-  (collect-hydra-keys "1 c p")
-
-  (should (equal
-           collect--test-result-prompt
-           "db1 > collection1 > "))
-
-  (should (equal
-           (split-string (car collect--test-result-entries) " " t)
-           (list "123" "foo")))
-
-  (should (equal
-           collect--test-result-actions
-           '(1 ("o" collect--show-document "Open in buffer") ("y" collect--action-copy-id "Copy row ID")))))
+  (with-mock
+    (stub collect--mongodb-raw-query => "[{\"_id\": 123, \"name\": \"foo\"}]")
+    (mock (collect--ivy-read
+           ;; prompt
+           "db1 > collection1 > "
+           ;; entries
+           '(#("123                            foo                                               "
+               0 81
+               (:id "123" :collection "collection1" :database "db1")))
+           ;; actions
+           '(1 ("o" collect--show-document "Open in buffer") ("y" collect--action-copy-id "Copy row ID")))
+          :times 1)
+    (collect-hydra-keys "1 c p")))
 
 (ert-deftest test-collect-ivy ()
   (collect-setup
@@ -208,11 +193,6 @@
                       :sort "_id: -1"
                       :limit 100))))
 
-  (defvar collect--test-result-database nil)
-  (defvar collect--test-result-prompt nil)
-  (defvar collect--test-result-entries nil)
-  (defvar collect--test-result-actions nil)
-
   (global-set-key (kbd "C-c c") 'hydra-collect/body)
 
   (defun collect-hydra-keys (keys)
@@ -221,74 +201,49 @@
      (vconcat (kbd "C-c c")
               (kbd keys))))
 
-  (defun collect--mongodb-raw-query (database query)
-    "Mock MongoDB response"
-    "[{\"_id\": \"123\", \"name\": \"foo\"}]")
-
-  (defun collect--display-prompt (prompt entries actions)
-    "Mock ivy entrypoint"
-    (setq collect--test-result-prompt prompt)
-    (setq collect--test-result-entries entries)
-    (setq collect--test-result-actions actions))
-
   ;; test databases view
-
-  (collect-show-databases)
-
-  (should (equal
-           collect--test-result-prompt
-           "> "))
-
-  (let ((entry (car collect--test-result-entries)))
-    (should (equal
-             (get-text-property 0 :database entry)
-             "db1")))
-
-  (should (equal
-           collect--test-result-actions
-           '(1 ("o" collect--ivy-show-collections-defined "Show collections")
-               ("O" collect--ivy-show-collections "Show all collections"))))
+  (with-mock
+    (stub collect--mongodb-raw-query => "[{\"_id\": \"123\", \"name\": \"foo\"}]")
+    (mock (collect--ivy-read
+           ;; prompt
+           "> "
+           ;; entries
+          '(#("db1                                                host1                                             "
+             0 101
+             (:database "db1")))
+          ;; actions
+          '(1 ("o" collect--ivy-show-collections-defined "Show collections")
+              ("O" collect--ivy-show-collections "Show all collections")))
+          :times 1)
+    (collect-show-databases))
 
   ;; test collections view
-
-  (collect-show-collections "db1" t)
-
-  (should (equal
-           collect--test-result-prompt
-           "db1 > "))
-  (should (equal
-           collect--test-result-actions
-           '(1 ("o" collect--ivy-action-show-documents-entries "Show documents"))))
-
-  (let ((collection-entry (car collect--test-result-entries)))
-    (should (equal
-             (get-text-property 0 :database collection-entry)
-             "db1"))
-    (should (equal
-             (get-text-property 0 :collection collection-entry)
-             "collection1")))
+  (with-mock
+    (stub collect--mongodb-raw-query => "[{\"_id\": \"123\", \"name\": \"foo\"}]")
+    (mock (collect--ivy-read
+           ;; prompt
+           "db1 > "
+           ;; entries
+          '(#("collection1" 0 11 (:collection "collection1" :database "db1")))
+          ;; actions
+          '(1 ("o" collect--ivy-action-show-documents-entries "Show documents")))
+          :times 1)
+    (collect-show-collections "db1" t))
 
   ;; test documents view
+  (let ((collection-entry #("collection1" 0 11 (:collection "collection1" :database "db1"))))
+    (with-mock
+      (stub collect--mongodb-raw-query => "[{\"_id\": \"123\", \"name\": \"foo\"}]")
+      (mock (collect--display
+             :database "db1"
+             :collection "collection1"
+             :entries '(#("123                            foo                                               "
+                         0 81
+                         (:id "123" :collection "collection1" :database "db1"))))
+            :times 1)
+      (collect--ivy-action-show-documents-entries collection-entry)
+      ))
 
-  (cl-defun collect--display (&key database collection entries actions)
-    "Mock ivy entrypoint"
-    (setq collect--test-result-database database)
-    (setq collect--test-result-collection collection)
-    (setq collect--test-result-entries entries)
-    (setq collect--test-result-actions actions))
-
-  (let ((collection-entry (car collect--test-result-entries)))
-
-    ;; show documents for collection
-    (collect--ivy-action-show-documents-entries collection-entry)
-    ;; test ID of first and only document
-    (should (equal
-             (get-text-property 0 :id (car collect--test-result-entries))
-             "123")))
-
-  (should (equal
-           collect--test-result-actions
-           nil))
   (should (equal
            (mapcar 'car (collect--get-actions "db1" "collection1"))
            (list "o" "y" "c"))))

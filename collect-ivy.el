@@ -34,7 +34,13 @@
 
 ;; required functions implementation for a front support
 
-(defun collect--ivy-display (prompt entries actions)
+(defun collect--ivy-display (database collection entries actions)
+  (let* ((custom-actions (collect--get-actions database collection))
+         (actions (append (or actions (list)) custom-actions))
+         (prompt (collect--ivy-get-prompt database collection)))
+    (collect--ivy-read prompt entries (cons 1 actions))))
+
+(defun collect--ivy-read (prompt entries actions)
   "Run front-end command to display results"
   (ivy-read prompt
             entries

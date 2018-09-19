@@ -38,7 +38,7 @@
 (defun collect--hydra-databases-heads ()
   (mapcar (lambda (x)
             (list (plist-get (cdr x) :key) `(collect--hydra-build-collections ,(car x)) (car x) :exit t))
-          (-filter (lambda (database)
+          (seq-filter (lambda (database)
                      (not (plist-get (cdr database) :hide)))
                    collect--databases)))
 
