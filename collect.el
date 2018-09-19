@@ -5,7 +5,7 @@
 ;; Author: Florian Perucki <florian@perucki.fr>
 ;; URL: https://github.com/florianperucki/collect
 ;; Version: 0.0.1
-;; Package-Requires: ((emacs "24.1") (ivy "0.10.0") (hydra 0.14.0))
+;; Package-Requires: ((emacs "24.1") (ivy "0.10.0") (hydra "0.14.0"))
 ;; Keywords: database mongodb sql
 
 ;; This file is not part of GNU Emacs.
@@ -51,12 +51,28 @@
 (require 'collect-mongodb)
 
 ;;;###autoload
-(defun collect-setup (&rest body)
-  (collect--build-hydras))
+(cl-defmacro collect-setup (&body body)
+  "Execute BODY to register databases and collections. Hydras for these databases
+will then be generated.
+
+BODY should consist of a sequence of `collect-add-database'
+and `collect-add-collection' calls."
+  `(progn
+     (setq collect--databases (list))
+     ,@body
+     (collect--build-hydras)))
 
 ;;;###autoload
-(cl-defun collect-add-database (&key name key type host user password)
-  "Register a database in collect"
+(cl-defun collect-add-database (&key name key type host user password hide)
+  "Register a database in collect
+
+NAME: name of the database
+KEY: corresponding key in the databases hydra
+TYPE: database type, e.g. 'mongodb
+HOST: remote database path
+USER: database user
+PASSWORD: database password
+HIDE: register database but don't propose it in databases hydra"
   ;; remove any existing entry for this database
   (when (assoc name collect--databases)
     (setq collect--databases
@@ -72,11 +88,23 @@
                              :type type
                              :host host
                              :user user
-                             :password password))))))
+                             :password password
+                             :hide hide))))))
 
 ;;;###autoload
-(cl-defun collect-configure-collection (&key database name key columns actions sort limit queries)
-  "Register a collection to an existing database"
+(cl-defun collect-add-collection (&key database name key columns actions sort limit queries display)
+  "Register a collection to an existing database.
+
+DATABASE: name of the database
+NAME: name of the collection
+KEY: corresponding key in the collections hydra
+columns: columns to display; also used for query projection
+SORT: query sort
+LIMIT: query limit
+QUERIES: pre-defined queries that will be accessible in the collection's hydra
+DISPLAY: how to display result rows. By default it will use `collect-selector'.
+Can also be set to 'table, in which case the rows will be displayed in a separate
+`tabulated-list-mode' buffer"
   (let* ((database-object (collect--get-database database))
          (value (cons name (list
                             :key key
@@ -90,6 +118,7 @@
 
 ;;;###autoload
 (defun collect-collection-query (database collection key)
+  "Run the query associated with KEY for the COLLECTION on DATABASE."
   (let* ((query (assoc key (collect--get-collection-property :queries database collection))))
     (collect--run-query (cdr query))))
 
@@ -116,13 +145,13 @@
 (defun collect-show-databases ()
   "Lists your defined databases"
   (interactive)
-  (let ((display-function (intern (format "collect--%S-databases" collect-selector))))
+  (let ((display-function (collect--get-front-function "databases")))
     (funcall display-function collect--databases)))
 
 (defun collect-show-collections (database &optional defined)
   (interactive "sDatabase: ")
   (let* ((collections (collect--get-collection-names database defined))
-         (display-function (intern (format "collect--%S-collections" collect-selector))))
+         (display-function (collect--get-front-function "collections")))
     (funcall display-function database collections)))
 
 ;; actions
@@ -156,9 +185,10 @@ are populated."
 (defun collect--run-query (query)
   "Execute a user-defined QUERY.
 
-The executed action depends on the ACTION type property:
+The executed action depends on the QUERY type property:
 
-read: execute a read operation"
+read: execute a read operation
+anything else: currently not implemented"
   (let* ((query-type (or (plist-get query :type) 'read))
          ;; target database for query, defaults to current
          (database (plist-get query :database))

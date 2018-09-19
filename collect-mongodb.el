@@ -8,8 +8,6 @@
 ;; Package-Requires: ((emacs "24.1") (ivy "0.10.0") (hydra 0.14.0))
 ;; Keywords: database mongodb sql
 
-;; This file is not part of GNU Emacs.
-
 ;; This file is free software: you can redistribute it and/or modify
 ;; it under the terms of the GNU General Public License as published by
 ;; the Free Software Foundation, either version 3 of the License, or
@@ -48,10 +46,13 @@
 If provided, QUERY must be a string in the MongoDB query syntax, without the surrounding '{}'.
 DOCUMENT-ID is the stringified ObjectId for a document to select.
 If FOREIGN_KEY is the field name used to query DOCUMENT-ID insteand of '_id'."
-  (let ((query (or query "")))
-    (if document-id
-        (format "%s, %s: ObjectId(\"%s\")" query (or foreign-key "_id") document-id)
-      query)))
+
+  (if document-id
+      (let ((composed (format "\"%s\": ObjectId(\"%s\")" (or foreign-key "_id") document-id)))
+        (if query
+            (format "%s, %s" query composed)
+          composed))
+    query))
 
 (defun collect--mongodb-get-collection-names (database)
   "Fetches collection names remotely."
@@ -119,7 +120,7 @@ emacs cannot interpret as json. "
      output)))
 
 (defun collect--mongodb-json-query (database query)
-  "Run the query against the datatable and parse the result as JSON."
+  "Run the query against the database and parse the result as JSON."
   (let* ((output (collect--mongodb-raw-query database query))
          (json-object-type 'hash-table)
          (json-array-type 'list)
@@ -127,7 +128,7 @@ emacs cannot interpret as json. "
     (json-read-from-string (collect--mongodb-requote-output output))))
 
 (defun collect--mongodb-raw-query (database query)
-  "Run the query against the datatable and return the result as a string."
+  "Run the query against the database and return the result as a string."
   (let* ((host (collect--get-database-property :host database))
          (user (collect--get-database-property :user database))
          (password (collect--get-database-property :password database))

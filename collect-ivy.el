@@ -8,8 +8,6 @@
 ;; Package-Requires: ((emacs "24.1") (ivy "0.10.0") (hydra 0.14.0))
 ;; Keywords: database mongodb sql
 
-;; This file is not part of GNU Emacs.
-
 ;; This file is free software: you can redistribute it and/or modify
 ;; it under the terms of the GNU General Public License as published by
 ;; the Free Software Foundation, either version 3 of the License, or
@@ -46,16 +44,16 @@
   "Display database list.
 entries: string list"
   (collect--display :entries (mapcar 'collect--ivy-format-entry-database entries)
-                       :actions (list
-                                   '("o" collect--ivy-show-collections-defined "Show collections")
-                                   '("O" collect--ivy-show-collections "Show all collections"))))
+                    :actions (list
+                              '("o" collect--ivy-show-collections-defined "Show collections")
+                              '("O" collect--ivy-show-collections "Show all collections"))))
 
 (defun collect--ivy-collections (database entries)
   "Display collections list for a given database.
 database: string
 entries: collections plist"
   (collect--display :database database
-                       :entries (mapcar (apply-partially 'collect--ivy-format-entry-collection database) entries)))
+                    :entries (mapcar (apply-partially 'collect--ivy-format-entry-collection database) entries)))
 
 (defun collect--ivy-get-prompt (&optional database collection)
   "Return prompt for the document type currently being displayed:
@@ -138,8 +136,8 @@ collection: string name of the collection
 id: unique row identifier"
   (let ((values (list)))
     (iter-do (value (collect--ivy-format-document-fields database
-                                                            collection
-                                                            (cdr entry)))
+                                                         collection
+                                                         (cdr entry)))
       (setq values (append values (list value))))
     (let* ((id (car entry))
            (output (string-join values " ")))
@@ -210,13 +208,13 @@ read: execute a read operation"
       (error "Unknown action type %S" action-type))))
 
 (defun collect--ivy-action-show-documents (database collection &optional skip query limit sort)
-  "Fetch and display collection's data, filtered by query if provided"
+  "Fetch and display collection's data, filtered by QUERY, SKIP, LIMIT and/or SORT if provided"
   (interactive)
   (let* ((documents (collect--build-and-run-select-query database collection skip query limit sort))
          (entries (mapcar (apply-partially 'collect--ivy-format-entry-document database collection) documents)))
     (collect--display :database database
-                         :collection collection
-                         :entries entries)))
+                      :collection collection
+                      :entries entries)))
 
 (provide 'collect-ivy)
 ;;; collect-ivy.el ends here
