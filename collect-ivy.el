@@ -61,6 +61,20 @@ entries: collections plist"
   (collect--display :database database
                     :entries (mapcar (apply-partially 'collect--ivy-format-entry-collection database) entries)))
 
+(defun collect--ivy-action-show-document (row)
+  "Action to execute on any row: show a single document"
+  (interactive)
+  (let* ((database (get-text-property 0 :database row))
+         (collection (get-text-property 0 :collection row))
+         (document-id (get-text-property 0 :id row)))
+    (collect--show-document database collection document-id)))
+
+(defun collect--ivy-action-show-documents (row)
+  "Action to execute on a collection row: query and display a list of documents"
+  (let* ((database (get-text-property 0 :database row))
+         (collection (get-text-property 0 :collection row)))
+    (collect--show-documents database collection)))
+
 (defun collect--ivy-get-prompt (&optional database collection)
   "Return prompt for the document type currently being displayed:
 collections if collection is nil, documents if collection is non-nil"
@@ -70,32 +84,12 @@ collections if collection is nil, documents if collection is non-nil"
         (format "%s > " database)
       "> ")))
 
-(defun collect--ivy-get-actions (&optional database collection)
-  "Return actions for the row type currently being displayed
-collections if collection is nil, documents if collection is non-nil"
-  (if collection
-      ;; actions on a document row
-      (let ((default-actions (list
-                              '("o" collect--show-document "Open in buffer")
-                              '("y" collect--action-copy-id "Copy row ID")))
-            (actions (mapcar 'collect--ivy-build-action (collect--get-collection-property :actions database collection))))
-        (append default-actions (or actions (list))))
-
-    ;; actions on a collection row
-    (if database (let ((default-actions '(("o" collect--ivy-action-show-documents-entries "Show documents")))
-                       (actions (mapcar 'collect--ivy-build-action (collect--get-database-property :actions database))))
-                   (append default-actions (or actions (list))))
-
-      ;; actions on a database row
-      (list))
-    ))
-
 
 ;; internals
 
 (defun collect--ivy-format-entry-database (entry)
   "Return a formatted string for a database row.
-entry: plist
+ENTRY: plist
 
 The returned string has the following property:
 database: string name of the database"
@@ -106,7 +100,7 @@ database: string name of the database"
      :database name)))
 
 (defun collect--ivy-format-entry-collection (database entry)
-  "Return the collection row string 'entry' with the following properties:
+  "Return the collection row string ENTRY with the following properties:
 database: string name of the database
 collection: string name of the collection"
   (propertize
@@ -158,69 +152,10 @@ id: unique row identifier"
 
 (defun collect--ivy-show-collections (entry &optional defined)
   "Show a list of collections.
-If defined is non-nil, not database fetch is done and only user-defined collections are displayed."
+If defined is non-nil, no database fetch is done and only user-defined collections are displayed."
   (let ((database (get-text-property 0 :database entry)))
     (collect-show-collections database defined)))
 
-(defun collect--ivy-action-show-documents-entries (entry &optional skip query)
-  "Action to execute on a collection row: query and display a list of documents"
-  (let* ((database (get-text-property 0 :database entry))
-         (collection (get-text-property 0 :collection entry)))
-    (collect--ivy-action-show-documents database collection skip query))) ; TODO limit + sort
-
-(defun collect--ivy-build-action (action)
-  (let* ((key (plist-get action :key))
-         (name (plist-get action :name)))
-    (list key (apply-partially 'collect--ivy-run-action action) name)))
-
-(defun collect--ivy-run-action (action entry)
-  "Execute an ACTION on a single document ENTRY.
-The executed action depends on the ACTION type property:
-
-read: execute a read operation"
-  (let* ((action-type (or (plist-get action :type) 'read))
-         ;; target database for action, defaults to current
-         (database (or
-                    (plist-get action :database)
-                    (get-text-property 0 :database entry)))
-         ;; target collection for action, defaults to current
-         (collection (or
-                      (plist-get action :collection)
-                      (get-text-property 0 :collection entry)))
-         ;; document unique id
-         (document-id (get-text-property 0 :id entry))
-         ;; if provided, this is the field name to use instead of the
-         ;; database default unique id field
-         (foreign-key (plist-get action :foreign))
-         ;; if t, the query returns a single document that we'll show in a new buffer
-         (single (plist-get action :single))
-         ;; usual query parameters
-         (sort (plist-get action :sort))
-         (limit (plist-get action :limit))
-         (skip (plist-get action :skip))
-         (projection (plist-get action :projection))
-         (query (plist-get action :query)))
-    (if (equal action-type 'read)
-        (collect-display :database database
-                         :collection collection
-                         :projection projection
-                         :skip skip
-                         :query query
-                         :limit limit
-                         :sort sort
-                         :foreign-key foreign-key
-                         :document-id document-id
-                         :single single)
-      (error "Unknown action type %S" action-type))))
-
-(defun collect--ivy-action-show-documents (database collection &optional skip query limit sort)
-  "Fetch and display collection's data, filtered by QUERY, SKIP, LIMIT and/or SORT if provided"
-  (interactive)
-  (let* ((documents (collect--build-and-run-select-query database collection skip query limit sort))
-         (entries (mapcar (apply-partially 'collect--ivy-format-entry-document database collection) documents)))
-    (collect--display :database database
-                      :collection collection
-                      :entries entries)))
 
 (provide 'collect-ivy)
 ;;; collect-ivy.el ends here

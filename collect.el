@@ -127,8 +127,7 @@ Can also be set to 'table, in which case the rows will be displayed in a separat
   "Build a query, run it and display its output, either a list of rows or a single document if documentp is non-nil."
   (if single
       ;; show a single document
-      (let ((show-document (collect--get-database-function "show-document" database)))
-        (funcall show-document database collection document-id :field foreign-key :projection projection))
+      (collect--show-document database collection document-id :field foreign-key :projection projection)
     ;; display rows
     (let* ((query (collect--compose-query database
                                           :query query
@@ -151,10 +150,21 @@ Can also be set to 'table, in which case the rows will be displayed in a separat
 (defun collect-show-collections (database &optional defined)
   (interactive "sDatabase: ")
   (let* ((collections (collect--get-collection-names database defined))
-         (display-function (collect--get-front-function "collections")))
+         (display-function (collect--get-front-function "collections" database)))
     (funcall display-function database collections)))
 
-;; actions
+(cl-defun collect--show-document (database collection document-id &key field projection)
+  (let ((show-document (collect--get-database-function "show-document" database)))
+    (funcall show-document database collection document-id :field field :projection projection)))
+
+(defun collect--show-documents (database collection &optional skip query limit sort)
+  "Fetch and display collection's data, filtered by QUERY, SKIP, LIMIT and/or SORT if provided"
+  (interactive)
+  (let* ((documents (collect--build-and-run-select-query database collection skip query limit sort))
+         (entries (mapcar (apply-partially 'collect--format-entry-document database collection) documents)))
+    (collect--display :database database
+                      :collection collection
+                      :entries entries)))
 
 ;;;###autoload
 (defun collect--configure-actions (database collection actions)
@@ -218,7 +228,15 @@ anything else: currently not implemented"
              :query query
              :foreign-key foreign-key)))
 
+(defun collect--action-show-documents (database collection &optional skip query limit sort)
+  "Display documents from the selected collection"
+  (let ((show-documents (collect--get-front-function "action-show-documents" database collection)))
+    (funcall show-documents database collection skip query limit sort)))
+
 (defun collect--action-copy-id (row)
+  (let ((copy-id (collect--get-front-function "action-copy-id" database collection)))
+    (funcall copy-id database collection skip query limit sort)))
+(defun collect--ivy-copy-id (row)
   "Action to execute on any row: add the row ID to the kill ring"
   (kill-new (get-text-property 0 :id row)))
 
@@ -256,6 +274,11 @@ database: string name of the database
 collection: string name of the collection
 column: plist"
   (or (plist-get column :width) collect-default-column-width))
+
+(defun collect--get-column-name (database collection column)
+  "Return the given column's display name, which could be the
+:name property (the remote name) or an :alias."
+  (or (plist-get column :alias) (plist-get column :name)))
 
 ;; database query
 
@@ -303,33 +326,96 @@ DATABASE: string name of a configured database"
 
 ;; accessing front methods
 
-(defun collect--get-front-function (function-name)
-  (intern (format "collect--%S-%s" collect-selector function-name)))
+(defun collect--get-front-function (function-name &optional database collection)
+  "Decide which front selector to use and return the requested function"
+  (let ((selector (cond
+                    (collection
+                     (or
+                      (collect--get-collection-property :display database collection)
+                      collect-selector))
+                    (database
+                     (or
+                      (collect--get-database-property :display database)
+                      collect-selector))
+                    (t
+                     collect-selector))))
+    (intern (format "collect--%S-%s" selector function-name))))
+
+;; actions
 
 (defun collect--get-actions (&optional database collection)
-  "Return actions for the document type currently being displayed
+  "Return actions for the row type currently being displayed
 collections if collection is nil, documents if collection is non-nil"
-  (let ((get-actions (collect--get-front-function "get-actions")))
-    (funcall get-actions database collection)))
+  (if collection
+      ;; actions on a document row
+      (let ((default-actions (list
+                              `("o" ,(collect--get-front-function "action-show-document" database collection) "Open in buffer")
+                              `("y" ,(collect--get-front-function "action-copy-id" database collection) "Copy row ID")))
+            (actions (mapcar 'collect--build-action (collect--get-collection-property :actions database collection))))
+        (append default-actions (or actions (list))))
 
-(defun collect--get-prompt (database &optional collection)
-  "Get formatted prompt for database and collection if provided"
-  (let ((get-prompt (collect--get-front-function "get-prompt")))
-    (funcall get-prompt database collection)))
+    ;; actions on a collection row
+    (if database (let ((default-actions `(("o" ,(collect--get-front-function "action-show-documents" database) "Show documents")))
+                       (actions (mapcar 'collect--build-action (collect--get-database-property :actions database))))
+                   (append default-actions (or actions (list))))
 
-(defun collect--display-prompt (prompt entries actions)
-  "Run front-end command to display results"
-  (let ((display (collect--get-front-function "display")))
-    (funcall display prompt entries actions)))
+      ;; actions on a database row
+      (list))))
+
+(defun collect--build-action (action)
+  (let* ((key (plist-get action :key))
+         (name (plist-get action :name)))
+    (list key (apply-partially 'collect--run-action action) name)))
+
+(defun collect--run-action (action entry)
+  "Execute an ACTION on a single document ENTRY.
+The executed action depends on the ACTION type property:
+
+read: execute a read operation
+anything else: currently not implemented"
+  (let* ((action-type (or (plist-get action :type) 'read))
+         ;; target database for action, defaults to current
+         (database (or
+                    (plist-get action :database)
+                    (get-text-property 0 :database entry)))
+         ;; target collection for action, defaults to current
+         (collection (or
+                      (plist-get action :collection)
+                      (get-text-property 0 :collection entry)))
+         ;; document unique id
+         (document-id (get-text-property 0 :id entry))
+         ;; if provided, this is the field name to use instead of the
+         ;; database default unique id field
+         (foreign-key (plist-get action :foreign))
+         ;; if t, the query returns a single document that we'll show in a new buffer
+         (single (plist-get action :single))
+         ;; usual query parameters
+         (sort (plist-get action :sort))
+         (limit (plist-get action :limit))
+         (skip (plist-get action :skip))
+         (projection (plist-get action :projection))
+         (query (plist-get action :query)))
+    (if (equal action-type 'read)
+        (collect-display :database database
+                         :collection collection
+                         :projection projection
+                         :skip skip
+                         :query query
+                         :limit limit
+                         :sort sort
+                         :foreign-key foreign-key
+                         :document-id document-id
+                         :single single)
+      (error "Unknown action type %S" action-type))))
+
+ ; TODO limit + sort
 
 ;; helpers
 
 (cl-defun collect--display (&key database collection entries actions)
   "Generic method to display prompt and results using the configured selector (e.g. ivy)"
-  (let* ((custom-actions (collect--get-actions database collection))
-         (actions (append (or actions (list)) custom-actions))
-         (prompt (collect--get-prompt database collection)))
-    (collect--display-prompt prompt entries (cons 1 actions))))
+  (let ((display-function (collect--get-front-function "display" database collection)))
+    (funcall display-function database collection entries actions)))
 
 (defun collect--set-property (property value item &optional tolist)
   "Set an item property to the given value.
@@ -370,17 +456,11 @@ property is already set the new value is appended."
   (let ((requote (collect--get-database-function "requote-output" database)))
     (funcall requote output)))
 
-(defun collect--show-document (row &optional projection)
-  "Action to execute on any row: add the row ID to the kill ring"
-  (let* ((database (get-text-property 0 :database row))
-         (collection (get-text-property 0 :collection row))
-         (document-id (get-text-property 0 :id row))
-         (show-document (collect--get-database-function "show-document" database)))
-    (funcall show-document database collection document-id)))
+
 
 (defun collect--format-entry-document (database collection row)
   "Format a data ROW so it can be displayed in the selected front tool (ivy)"
-  (let ((format-function (collect--get-front-function "format-entry-document")))
+  (let ((format-function (collect--get-front-function "format-entry-document" database collection)))
     (funcall format-function database collection row)))
 
 (provide 'collect)

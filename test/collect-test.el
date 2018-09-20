@@ -31,6 +31,7 @@
 (require 'json)
 (require 'hydra)
 (require 'el-mock)
+(require 'ert)
 (load-file "collect-hydra.el")
 (load-file "collect-mongodb.el")
 (load-file "collect-ivy.el")
@@ -164,7 +165,9 @@
                0 81
                (:id "123" :collection "collection1" :database "db1")))
            ;; actions
-           '(1 ("o" collect--show-document "Open in buffer") ("y" collect--action-copy-id "Copy row ID")))
+           '(1
+             ("o" collect--ivy-action-show-document "Open in buffer")
+             ("y" collect--ivy-action-copy-id "Copy row ID")))
           :times 1)
     (collect-hydra-keys "1 c p")))
 
@@ -226,7 +229,7 @@
            ;; entries
           '(#("collection1" 0 11 (:collection "collection1" :database "db1")))
           ;; actions
-          '(1 ("o" collect--ivy-action-show-documents-entries "Show documents")))
+          '(1 ("o" collect--ivy-action-show-documents "Show documents")))
           :times 1)
     (collect-show-collections "db1" t))
 
@@ -241,7 +244,7 @@
                          0 81
                          (:id "123" :collection "collection1" :database "db1"))))
             :times 1)
-      (collect--ivy-action-show-documents-entries collection-entry)
+      (funcall (collect--get-front-function "action-show-documents" "db1" "collection1") collection-entry)
       ))
 
   (should (equal
