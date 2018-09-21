@@ -62,7 +62,7 @@
   "Build and display a hydra proposing actions for the previously selected collection"
   (let* ((queries (mapcar 'cdr (collect--get-collection-property :queries database collection)))
          (default-queries (list
-                           `("1" (lambda () (interactive) (collect--action-show-documents ,database ,collection)) "All")))
+                           `("1" (lambda () (interactive) (collect--show-documents ,database ,collection)) "All")))
          (queries-heads
           (mapcar
            (lambda (query)

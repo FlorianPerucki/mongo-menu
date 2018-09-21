@@ -35,6 +35,7 @@
 (load-file "collect-hydra.el")
 (load-file "collect-mongodb.el")
 (load-file "collect-ivy.el")
+(load-file "collect-table.el")
 (load-file "collect.el")
 
 (ert-deftest test-collect ()
@@ -163,10 +164,10 @@
            ;; entries
            '(#("123                            foo                                               "
                0 81
-               (:id "123" :collection "collection1" :database "db1")))
+               (:document-id "123" :collection "collection1" :database "db1")))
            ;; actions
            '(1
-             ("o" collect--ivy-action-show-document "Open in buffer")
+             ("RET" collect--ivy-action-show-document "Open in buffer")
              ("y" collect--ivy-action-copy-id "Copy row ID")))
           :times 1)
     (collect-hydra-keys "1 c p")))
@@ -198,12 +199,6 @@
 
   (global-set-key (kbd "C-c c") 'hydra-collect/body)
 
-  (defun collect-hydra-keys (keys)
-    "Run hydra-collect/body and then choose KEYS heads successively"
-    (execute-kbd-macro
-     (vconcat (kbd "C-c c")
-              (kbd keys))))
-
   ;; test databases view
   (with-mock
     (stub collect--mongodb-raw-query => "[{\"_id\": \"123\", \"name\": \"foo\"}]")
@@ -215,7 +210,7 @@
              0 101
              (:database "db1")))
           ;; actions
-          '(1 ("o" collect--ivy-show-collections-defined "Show collections")
+          '(1 ("RET" collect--ivy-show-collections-defined "Show collections")
               ("O" collect--ivy-show-collections "Show all collections")))
           :times 1)
     (collect-show-databases))
@@ -229,7 +224,7 @@
            ;; entries
           '(#("collection1" 0 11 (:collection "collection1" :database "db1")))
           ;; actions
-          '(1 ("o" collect--ivy-action-show-documents "Show documents")))
+          '(1 ("RET" collect--ivy-action-show-documents "Show documents")))
           :times 1)
     (collect-show-collections "db1" t))
 
@@ -242,14 +237,14 @@
              :collection "collection1"
              :entries '(#("123                            foo                                               "
                          0 81
-                         (:id "123" :collection "collection1" :database "db1"))))
+                         (:document-id "123" :collection "collection1" :database "db1"))))
             :times 1)
       (funcall (collect--get-front-function "action-show-documents" "db1" "collection1") collection-entry)
       ))
 
   (should (equal
            (mapcar 'car (collect--get-actions "db1" "collection1"))
-           (list "o" "y" "c"))))
+           (list "RET" "y" "c"))))
 
 (ert-deftest test-collect-mongodb ()
   (collect-setup
@@ -301,21 +296,95 @@
                                            :foreign-key "foo.bar")
            "field1: 1, \"foo.bar\": ObjectId(\"12345\")"))
 
-  (defun collect--mongodb-raw-query (db query)
-    "[{\"_id\": ObjectId(\"12345\"), \"name\": \"foo\", \"nested\": {\"field\": \"bar\"}}]")
+  (with-mock
+    (stub collect--mongodb-raw-query => "[{\"_id\": ObjectId(\"12345\"), \"name\": \"foo\", \"nested\": {\"field\": \"bar\"}}]")
 
-  (let ((row (car (collect--mongodb-json-query "db1" ""))))
-    (should (equal
-             (collect--mongodb-get-document-field "_id" row)
-             "ObjectId(\"12345\")"))
-    (should (equal
-             (collect--mongodb-get-document-field "name" row)
-             "foo"))
-    (should (equal
-             (collect--mongodb-get-document-field "nested.field" row)
-             "bar"))
-    (should (equal
-             (collect--mongodb-extract-data-document "db1" "collection1" row)
-             '("12345" "12345" "foo")))))
+    (let ((row (car (collect--mongodb-json-query "db1" ""))))
+      (should (equal
+               (collect--mongodb-get-document-field "_id" row)
+               "ObjectId(\"12345\")"))
+      (should (equal
+               (collect--mongodb-get-document-field "name" row)
+               "foo"))
+      (should (equal
+               (collect--mongodb-get-document-field "nested.field" row)
+               "bar"))
+      (should (equal
+               (collect--mongodb-extract-data-document "db1" "collection1" row)
+               '("12345" "12345" "foo"))))))
 
+(ert-deftest test-collect-table ()
+
+  ;; test case 1: default display for database, table display for collection
+  (collect-setup
+   (collect-add-database
+    :name "db1"
+    :key "d"
+    :type 'mongodb
+    :host "host1"
+    :user "user"
+    :password "password")
+   (collect-add-collection
+    :database "db1"
+    :name "collection1"
+    :key "c"
+    :display 'table
+    :columns '((:name "_id" :width 30)
+               (:name "name" :width 50))
+    :sort "name: 1"
+    :limit 15
+    :actions '((:name "Items"
+                      :key "c"
+                      :collection "collection2"
+                      :foreign "item"
+                      :query "\"some.flag\": true"
+                      :sort "_id: -1"
+                      :limit 100))))
+
+  (global-set-key (kbd "C-c c") 'hydra-collect/body)
+
+  ;; test databases view
+  (with-mock
+    (stub collect--mongodb-raw-query => "[{\"_id\": \"123\", \"name\": \"foo\"}]")
+    (mock (collect--ivy-read
+           ;; prompt
+           "> "
+           ;; entries
+          '(#("db1                                                host1                                             "
+             0 101
+             (:database "db1")))
+          ;; actions
+          '(1 ("RET" collect--ivy-show-collections-defined "Show collections")
+              ("O" collect--ivy-show-collections "Show all collections")))
+          :times 1)
+    (collect-show-databases))
+
+  ;; test collections view
+  (with-mock
+    (stub collect--mongodb-raw-query => "[{\"_id\": \"123\", \"name\": \"foo\"}]")
+    (mock (collect--ivy-read
+           ;; prompt
+           "db1 > "
+           ;; entries
+          '(#("collection1" 0 11 (:collection "collection1" :database "db1")))
+          ;; actions
+          '(1 ("RET" collect--ivy-action-show-documents "Show documents")))
+          :times 1)
+    (collect-show-collections "db1" t))
+
+  ;; test documents view
+  ;; (let ((collection-entry #("collection1" 0 11 (:collection "collection1" :database "db1"))))
+  ;;   (with-mock
+  ;;     (stub collect--mongodb-raw-query => "[{\"_id\": \"123\", \"name\": \"foo\"}]")
+  ;;     (mock (collect--display
+  ;;            :database "db1"
+  ;;            :collection "collection1"
+  ;;            :entries '(("123" ["123" "foo"])))
+  ;;           :times 1)
+  ;;     (funcall (collect--get-front-function "action-show-documents" "db1" "collection1") collection-entry)
+  ;;     ))
+
+  (should (equal
+           (mapcar 'car (collect--get-actions "db1" "collection1"))
+           (list "RET" "y" "c"))))
 ;; collect-test.el ends here

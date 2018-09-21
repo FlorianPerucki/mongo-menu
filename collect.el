@@ -49,6 +49,7 @@
 (require 'collect-ivy)
 (require 'collect-hydra)
 (require 'collect-mongodb)
+(require 'collect-table)
 
 ;;;###autoload
 (cl-defmacro collect-setup (&body body)
@@ -63,7 +64,7 @@ and `collect-add-collection' calls."
      (collect--build-hydras)))
 
 ;;;###autoload
-(cl-defun collect-add-database (&key name key type host user password hide)
+(cl-defun collect-add-database (&key name key type host user password hide display)
   "Register a database in collect
 
 NAME: name of the database
@@ -89,6 +90,7 @@ HIDE: register database but don't propose it in databases hydra"
                              :host host
                              :user user
                              :password password
+                             :display display
                              :hide hide))))))
 
 ;;;###autoload
@@ -113,6 +115,7 @@ Can also be set to 'table, in which case the rows will be displayed in a separat
                             :actions (collect--configure-actions database name actions)
                             :sort sort
                             :limit limit
+                            :display display
                             :queries (collect--configure-queries database name queries)))))
     (collect--set-property :collections value database-object t)))
 
@@ -159,7 +162,6 @@ Can also be set to 'table, in which case the rows will be displayed in a separat
 
 (defun collect--show-documents (database collection &optional skip query limit sort)
   "Fetch and display collection's data, filtered by QUERY, SKIP, LIMIT and/or SORT if provided"
-  (interactive)
   (let* ((documents (collect--build-and-run-select-query database collection skip query limit sort))
          (entries (mapcar (apply-partially 'collect--format-entry-document database collection) documents)))
     (collect--display :database database
@@ -227,18 +229,6 @@ anything else: currently not implemented"
              :document-id document-id
              :query query
              :foreign-key foreign-key)))
-
-(defun collect--action-show-documents (database collection &optional skip query limit sort)
-  "Display documents from the selected collection"
-  (let ((show-documents (collect--get-front-function "action-show-documents" database collection)))
-    (funcall show-documents database collection skip query limit sort)))
-
-(defun collect--action-copy-id (row)
-  (let ((copy-id (collect--get-front-function "action-copy-id" database collection)))
-    (funcall copy-id database collection skip query limit sort)))
-(defun collect--ivy-copy-id (row)
-  "Action to execute on any row: add the row ID to the kill ring"
-  (kill-new (get-text-property 0 :id row)))
 
 ;; getting customizable option value
 
@@ -332,6 +322,7 @@ DATABASE: string name of a configured database"
                     (collection
                      (or
                       (collect--get-collection-property :display database collection)
+                      (collect--get-database-property :display database)
                       collect-selector))
                     (database
                      (or
@@ -349,41 +340,51 @@ collections if collection is nil, documents if collection is non-nil"
   (if collection
       ;; actions on a document row
       (let ((default-actions (list
-                              `("o" ,(collect--get-front-function "action-show-document" database collection) "Open in buffer")
+                              `("RET" ,(collect--get-front-function "action-show-document" database collection) "Open in buffer")
                               `("y" ,(collect--get-front-function "action-copy-id" database collection) "Copy row ID")))
-            (actions (mapcar 'collect--build-action (collect--get-collection-property :actions database collection))))
+            (actions (mapcar `(lambda (action) (interactive) (collect--build-action ,database ,collection action))
+                             (collect--get-collection-property :actions database collection))))
         (append default-actions (or actions (list))))
 
     ;; actions on a collection row
-    (if database (let ((default-actions `(("o" ,(collect--get-front-function "action-show-documents" database) "Show documents")))
-                       (actions (mapcar 'collect--build-action (collect--get-database-property :actions database))))
-                   (append default-actions (or actions (list))))
+    (if database
+        (let ((default-actions (list
+                                `("RET" ,(collect--get-front-function "action-show-documents" database) "Show documents")))
+              (actions (mapcar
+                        `(lambda (action) (interactive) (collect--build-action ,database ,collection action))
+                        (collect--get-database-property :actions database))))
+          (append default-actions (or actions (list))))
 
       ;; actions on a database row
       (list))))
 
-(defun collect--build-action (action)
+(defun collect--build-action (database collection action)
   (let* ((key (plist-get action :key))
          (name (plist-get action :name)))
-    (list key (apply-partially 'collect--run-action action) name)))
+    (list key `(lambda () (interactive) (collect--run-action ,database ,collection ',action)) name)))
 
-(defun collect--run-action (action entry)
+(defun collect--get-current-entry (database collection &optional entry)
+  (let ((get-current-entry (collect--get-front-function "get-current-entry" database collection)))
+    (funcall get-current-entry entry)))
+
+(defun collect--run-action (database collection action &optional entry)
   "Execute an ACTION on a single document ENTRY.
 The executed action depends on the ACTION type property:
 
 read: execute a read operation
 anything else: currently not implemented"
-  (let* ((action-type (or (plist-get action :type) 'read))
+  (let* ((entry (collect--get-current-entry database collection entry))
+         (action-type (or (plist-get action :type) 'read))
          ;; target database for action, defaults to current
          (database (or
                     (plist-get action :database)
-                    (get-text-property 0 :database entry)))
+                    (plist-get entry :database)))
          ;; target collection for action, defaults to current
          (collection (or
                       (plist-get action :collection)
-                      (get-text-property 0 :collection entry)))
+                      (plist-get entry :collection)))
          ;; document unique id
-         (document-id (get-text-property 0 :id entry))
+         (document-id (plist-get entry :document-id))
          ;; if provided, this is the field name to use instead of the
          ;; database default unique id field
          (foreign-key (plist-get action :foreign))
@@ -455,8 +456,6 @@ property is already set the new value is appended."
 (defun collect--requote-output (database output)
   (let ((requote (collect--get-database-function "requote-output" database)))
     (funcall requote output)))
-
-
 
 (defun collect--format-entry-document (database collection row)
   "Format a data ROW so it can be displayed in the selected front tool (ivy)"

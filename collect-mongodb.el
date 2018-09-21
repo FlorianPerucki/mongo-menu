@@ -144,7 +144,11 @@ emacs cannot interpret as json. "
         (when collect--debug
           (message "[MONGODB] QUERY: %s" query)
           (message "[MONGODB] RESPONSE: %s" output))
-        output))))
+        (if (or
+             (string-match-p "Failed to connect" output)
+             (string-match-p "exception: connect failed" output))
+            (error "Connection failed")
+          output)))))
 
 (defun collect--mongodb-extract-data-document (database collection row)
   "Return a list of columns for a single document, according to the collection's columns settings.

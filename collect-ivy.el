@@ -51,7 +51,7 @@
 entries: string list"
   (collect--display :entries (mapcar 'collect--ivy-format-entry-database entries)
                     :actions (list
-                              '("o" collect--ivy-show-collections-defined "Show collections")
+                              '("RET" collect--ivy-show-collections-defined "Show collections")
                               '("O" collect--ivy-show-collections "Show all collections"))))
 
 (defun collect--ivy-collections (database entries)
@@ -66,7 +66,7 @@ entries: collections plist"
   (interactive)
   (let* ((database (get-text-property 0 :database row))
          (collection (get-text-property 0 :collection row))
-         (document-id (get-text-property 0 :id row)))
+         (document-id (get-text-property 0 :document-id row)))
     (collect--show-document database collection document-id)))
 
 (defun collect--ivy-action-show-documents (row)
@@ -74,6 +74,10 @@ entries: collections plist"
   (let* ((database (get-text-property 0 :database row))
          (collection (get-text-property 0 :collection row)))
     (collect--show-documents database collection)))
+
+(defun collect--action-ivy-copy-id (row)
+  "Action to execute on any row: add the row ID to the kill ring"
+  (kill-new (get-text-property 0 :document-id row)))
 
 (defun collect--ivy-get-prompt (&optional database collection)
   "Return prompt for the document type currently being displayed:
@@ -84,6 +88,16 @@ collections if collection is nil, documents if collection is non-nil"
         (format "%s > " database)
       "> ")))
 
+(defun collect--ivy-get-current-entry (&optional entry)
+  (let* ((database (get-text-property 0 :database entry))
+         ;; target collection for action, defaults to current
+         (collection (get-text-property 0 :collection entry))
+         ;; document unique id
+         (document-id (get-text-property 0 :document-id entry)))
+    (list
+     :database database
+     :collection collection
+     :document-id document-id)))
 
 ;; internals
 
@@ -144,7 +158,7 @@ id: unique row identifier"
       (propertize output
                   :database database
                   :collection collection
-                  :id id))))
+                  :document-id id))))
 
 (defun collect--ivy-show-collections-defined (entry)
   "Show a list of user-defined collections"
