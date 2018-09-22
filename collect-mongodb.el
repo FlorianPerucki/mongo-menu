@@ -41,14 +41,17 @@
 
 ;; required functions for a database support
 
-(cl-defun collect--mongodb-compose-query (&key query document-id foreign-key)
+(cl-defun collect--mongodb-compose-query (database collection &key query document-id foreign-key)
   "Build a single query from multiple arguments.
 If provided, QUERY must be a string in the MongoDB query syntax, without the surrounding '{}'.
 DOCUMENT-ID is the stringified ObjectId for a document to select.
 If FOREIGN_KEY is the field name used to query DOCUMENT-ID insteand of '_id'."
-
   (if document-id
-      (let ((composed (format "\"%s\": ObjectId(\"%s\")" (or foreign-key "_id") document-id)))
+      (let* ((id (if (or (collect--get-database-property :key-not-oid database)
+                         (collect--get-collection-property :key-not-oid database collection))
+                     (format "\"%s\"" id)
+                   (format "ObjectId(\"%s\")" id)))
+             (composed (format "\"%s\": %s" (or foreign-key "_id") id)))
         (if query
             (format "%s, %s" query composed)
           composed))
@@ -77,7 +80,11 @@ If FOREIGN_KEY is the field name used to query DOCUMENT-ID insteand of '_id'."
 
 (defun collect--mongodb-find-by-id (database collection id &optional field)
   "Find a document by its id and return it"
-  (let ((query (format "db.%s.findOne({%s: ObjectId(\"%s\")})" collection (or field "_id") id)))
+  (let* ((id (if (or (collect--get-database-property :key-not-oid database)
+                     (collect--get-collection-property :key-not-oid database collection))
+                 (format "\"%s\"" id)
+               (format "ObjectId(\"%s\")" id)))
+         (query (format "db.%s.findOne({%s: %s})" collection (or field "_id") id)))
     (collect--mongodb-raw-query database query)))
 
 (defun collect--mongodb-run-select-query (database query &optional raw)

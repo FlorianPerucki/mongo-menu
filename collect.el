@@ -94,7 +94,7 @@ HIDE: register database but don't propose it in databases hydra"
                              :hide hide))))))
 
 ;;;###autoload
-(cl-defun collect-add-collection (&key database name key columns actions sort limit heads display)
+(cl-defun collect-add-collection (&key database name key columns actions sort limit heads display key-not-oid)
   "Register a collection to an existing database.
 
 DATABASE: name of the database
@@ -106,6 +106,8 @@ LIMIT: query limit
 HEADS: pre-defined queries that will be accessible in the collection's hydra
 DISPLAY: how to display result rows. By default it will use `collect-selector'.
 Can also be set to 'table, in which case the rows will be displayed in a separate
+KEY-NOT-OID: For MongoDB databases only. If non nil, the raw _id field value will be used
+instead of putting it inside an ObjectId().
 `tabulated-list-mode' buffer"
   (let* ((database-object (collect--get-database database))
          (value (cons name (list
@@ -116,6 +118,7 @@ Can also be set to 'table, in which case the rows will be displayed in a separat
                             :sort sort
                             :limit limit
                             :display display
+                            :key-not-oid key-not-oid
                             :heads (collect--configure-heads database name heads)))))
     (collect--set-property :collections value database-object t)))
 
@@ -133,6 +136,7 @@ Can also be set to 'table, in which case the rows will be displayed in a separat
       (collect--show-document database collection document-id :field foreign-key :projection projection)
     ;; display rows
     (let* ((query (collect--compose-query database
+                                          collection
                                           :query query
                                           :foreign-key foreign-key
                                           :document-id document-id))
@@ -222,10 +226,12 @@ anything else: currently not implemented"
                          :sort sort)
       (error "Unknown query type %S" query-type))))
 
-(cl-defun collect--compose-query (database &key query document-id foreign-key)
+(cl-defun collect--compose-query (database collection &key query document-id foreign-key)
   "Build a single query from multiple arguments"
   (let ((compose-query (collect--get-database-function "compose-query" database)))
     (funcall compose-query
+             database
+             collection
              :document-id document-id
              :query query
              :foreign-key foreign-key)))
