@@ -94,7 +94,7 @@ HIDE: register database but don't propose it in databases hydra"
                              :hide hide))))))
 
 ;;;###autoload
-(cl-defun collect-add-collection (&key database name key columns actions sort limit queries display)
+(cl-defun collect-add-collection (&key database name key columns actions sort limit heads display)
   "Register a collection to an existing database.
 
 DATABASE: name of the database
@@ -103,7 +103,7 @@ KEY: corresponding key in the collections hydra
 columns: columns to display; also used for query projection
 SORT: query sort
 LIMIT: query limit
-QUERIES: pre-defined queries that will be accessible in the collection's hydra
+HEADS: pre-defined queries that will be accessible in the collection's hydra
 DISPLAY: how to display result rows. By default it will use `collect-selector'.
 Can also be set to 'table, in which case the rows will be displayed in a separate
 `tabulated-list-mode' buffer"
@@ -116,14 +116,14 @@ Can also be set to 'table, in which case the rows will be displayed in a separat
                             :sort sort
                             :limit limit
                             :display display
-                            :queries (collect--configure-queries database name queries)))))
+                            :heads (collect--configure-heads database name heads)))))
     (collect--set-property :collections value database-object t)))
 
 ;;;###autoload
-(defun collect-collection-query (database collection key)
+(defun collect-collection-head (database collection key)
   "Run the query associated with KEY for the COLLECTION on DATABASE."
-  (let* ((query (assoc key (collect--get-collection-property :queries database collection))))
-    (collect--run-query (cdr query))))
+  (let* ((head (assoc key (collect--get-collection-property :heads database collection))))
+    (collect--run-query (cdr head))))
 
 ;;;###autoload
 (cl-defun collect-display (&key database collection skip query limit sort foreign-key document-id single projection)
@@ -181,18 +181,18 @@ is targetting a different database/collection than the current one."
           actions))
 
 ;;;###autoload
-(defun collect--configure-queries (database collection queries)
-  "Create an alist where the key is the query key. Also ensure database and collection
+(defun collect--configure-heads (database collection heads)
+  "Create an alist where the key is the head key. Also ensure database and collection
 are populated."
-  (mapcar #'(lambda (query)
+  (mapcar #'(lambda (head)
               (cons
-               (plist-get query :key)
-               (progn (when (not (plist-get query :database))
-                        (plist-put query :database database))
-                      (when (not (plist-get query :collection))
-                        (plist-put query :collection collection))
-                      query)))
-          queries))
+               (plist-get head :key)
+               (progn (when (not (plist-get head :database))
+                        (plist-put head :database database))
+                      (when (not (plist-get head :collection))
+                        (plist-put head :collection collection))
+                      head)))
+          heads))
 
 (defun collect--run-query (query)
   "Execute a user-defined QUERY.
@@ -361,7 +361,7 @@ collections if collection is nil, documents if collection is non-nil"
 (defun collect--build-action (database collection action)
   (let* ((key (plist-get action :key))
          (name (plist-get action :name)))
-    (list key `(lambda () (interactive) (collect--run-action ,database ,collection ',action)) name)))
+    (list key `(lambda (&optional entry) (interactive) (collect--run-action ,database ,collection ',action entry)) name)))
 
 (defun collect--get-current-entry (database collection &optional entry)
   (let ((get-current-entry (collect--get-front-function "get-current-entry" database collection)))

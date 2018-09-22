@@ -47,7 +47,7 @@
     (mapcar
      (lambda (collection)
        (let ((key (collect--get-collection-property :key database collection)))
-         (list key `(collect--hydra-build-queries ,database ,collection) collection :exit t)))
+         (list key `(collect--hydra-build-heads ,database ,collection) collection :exit t)))
      collections)))
 
 (defun collect--hydra-build-collections (database)
@@ -58,22 +58,22 @@
              ,@heads))
     (collect--hydra-tmp/body)))
 
-(defun collect--hydra-build-queries (database collection)
+(defun collect--hydra-build-heads (database collection)
   "Build and display a hydra proposing actions for the previously selected collection"
-  (let* ((queries (mapcar 'cdr (collect--get-collection-property :queries database collection)))
-         (default-queries (list
+  (let* ((heads (mapcar 'cdr (collect--get-collection-property :heads database collection)))
+         (default-heads (list
                            `("1" (lambda () (interactive) (collect--show-documents ,database ,collection)) "All")))
-         (queries-heads
+         (formatted-heads
           (mapcar
-           (lambda (query)
-             (let* ((key (plist-get query :key))
-                    (name (plist-get query :name)))
-               (list key `(collect-collection-query ,database ,collection ,key) name :exit t)))
-           queries))
-         (queries-heads (append (or default-queries (list)) queries-heads)))
+           (lambda (head)
+             (let* ((key (plist-get head :key))
+                    (name (plist-get head :name)))
+               (list key `(collect-collection-head ,database ,collection ,key) name :exit t)))
+           heads))
+         (formatted-heads (append (or default-heads (list)) formatted-heads)))
     (eval `(defhydra collect--hydra-tmp (:color blue)
              "Collect"
-             ,@queries-heads))
+             ,@formatted-heads))
     (collect--hydra-tmp/body)))
 
 (provide 'collect-hydra)

@@ -129,7 +129,7 @@
                (:name "name" :width 50))
     :sort "name: 1"
     :limit 15
-    :queries '((:name "Foobar"
+    :heads '((:name "Foobar"
                       :key "p"
                       :query "\"foo\": \"bar\""
                       :sort "_id: -1"
