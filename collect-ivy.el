@@ -135,6 +135,7 @@ values: list of values (string, integer, etc.)"
     (while (< collect--tmp-index len)
       (let* ((value (elt values collect--tmp-index))
              (column (elt columns collect--tmp-index))
+             (value (collect--get-column-value database collection column value))
              (width (collect--get-column-width database collection column)))
         (iter-yield (format
                      (format "%%1$#-%ss" width) ; build the format we want before using it

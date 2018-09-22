@@ -49,8 +49,8 @@ If FOREIGN_KEY is the field name used to query DOCUMENT-ID insteand of '_id'."
   (if document-id
       (let* ((id (if (or (collect--get-database-property :key-not-oid database)
                          (collect--get-collection-property :key-not-oid database collection))
-                     (format "\"%s\"" id)
-                   (format "ObjectId(\"%s\")" id)))
+                     (format "\"%s\"" document-id)
+                   (format "ObjectId(\"%s\")" document-id)))
              (composed (format "\"%s\": %s" (or foreign-key "_id") id)))
         (if query
             (format "%s, %s" query composed)
@@ -168,7 +168,7 @@ The _id row is always added as the first element."
 (defun collect--mongodb-value-template (row field)
   "Format a single field value and escape characters not supported by json-mode."
   (let* ((field (plist-get field :name))
-        (value (collect--mongodb-get-document-field field row)))
+         (value (collect--mongodb-get-document-field field row)))
     (collect--mongodb-value-pretty value)))
 
 (defun collect--mongodb-get-document-field (field document)
@@ -180,8 +180,8 @@ The _id row is always added as the first element."
         ;; we need to go deeper
         (progn
           (collect--mongodb-get-document-field
-            (string-join (cdr parts) ".") ; rebuild dotted path, skipping the first one
-            subdocument)
+           (string-join (cdr parts) ".") ; rebuild dotted path, skipping the first one
+           subdocument)
           )
       ;; we found what we're looking for
       (gethash field document))))
@@ -193,7 +193,7 @@ The _id row is always added as the first element."
        "^\\(ObjectId(\"\\(.*?\\)\")\\)"
        "\\2"
        value nil nil 1)
-    (format "%s" value))
+    value)
   )
 
 (provide 'collect-mongodb)

@@ -273,25 +273,28 @@
            "db.collection1.find({}, {\"_id\": 1, \"name\": 1}).sort({name: 1}).skip(0).limit(15)"))
 
   (should (equal
-           (collect--mongodb-compose-query :document-id "123")
+           (collect--mongodb-compose-query "db1" "collection1" :document-id "123")
            "\"_id\": ObjectId(\"123\")"))
 
   (should (equal
-           (collect--mongodb-compose-query :query "field1: 1")
+           (collect--mongodb-compose-query "db1" "collection1" :query "field1: 1")
            "field1: 1"))
 
   (should (equal
-           (collect--mongodb-compose-query :query "field1: 1"
+           (collect--mongodb-compose-query "db1" "collection1"
+                                           :query "field1: 1"
                                            :document-id "12345")
            "field1: 1, \"_id\": ObjectId(\"12345\")"))
 
   (should (equal
-           (collect--mongodb-compose-query :document-id "123"
+           (collect--mongodb-compose-query "db1" "collection1"
+                                           :document-id "123"
                                            :foreign-key "foo")
            "\"foo\": ObjectId(\"123\")"))
 
   (should (equal
-           (collect--mongodb-compose-query :query "field1: 1"
+           (collect--mongodb-compose-query "db1" "collection1"
+                                           :query "field1: 1"
                                            :document-id "12345"
                                            :foreign-key "foo.bar")
            "field1: 1, \"foo.bar\": ObjectId(\"12345\")"))

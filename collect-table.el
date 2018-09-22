@@ -140,25 +140,43 @@ entries: collections plist"
   "TODO"
   (list (propertize entry :database database :collection entry) [entry]))
 
-(defun collect--table-format-entry-document (database collection values)
-  "TODO"
-  (list (propertize (car values) :database database :collection collection)
-        (vconcat (cdr values))))
+(iter-defun collect--table-format-document-fields (database collection values)
+  "Generate a formatted string for each field values of a single row.
+database: string
+collection: string
+values: list of values (string, integer, etc.)"
+  (let* ((collect--tmp-index 0)
+         (columns (collect--get-collection-columns database collection))
+         (len (length values)))
+    (when (not (equal len (length columns)))
+      (error "Column templates and values mismatch"))
+    (while (< collect--tmp-index len)
+      (let* ((value (elt values collect--tmp-index))
+             (column (elt columns collect--tmp-index))
+             (value (collect--get-column-value database collection column value)))
+        (iter-yield value))
+      (setq collect--tmp-index (1+ collect--tmp-index)))))
 
-;; (iter-defun collect--table-format-document-fields (database collection values)
-;;   "Generate a formatted string for each field values of a single row.
-;; database: string
-;; collection: string
-;; values: list of values (string, integer, etc.)"
-;;   (let* ((collect--tmp-index 0)
-;;          (columns (collect--get-collection-columns database collection))
-;;          (len (length values)))
-;;     (when (not (equal len (length columns)))
-;;       (error "Column templates and values mismatch"))
-;;     (while (< collect--tmp-index len)
-;;       (let* ((value (elt values collect--tmp-index)))
-;;         (iter-yield (s-truncate width value))
-;;       (setq collect--tmp-index (1+ collect--tmp-index))))))
+(defun collect--table-format-entry-document (database collection entry)
+  "Return a string for a single document row.
+
+The returned string has the following properties:
+database: string name of the database
+collection: string name of the collection
+id: unique row identifier"
+  (let ((values (list)))
+    (iter-do (value (collect--table-format-document-fields database
+                                                         collection
+                                                         (cdr entry)))
+      (setq values (append values (list value))))
+    (let* ((id (car entry))
+           (output (vconcat values)))
+      (list
+       (propertize id
+                   :database database
+                   :collection collection
+                   :document-id id)
+       output))))
 
 (provide 'collect-table)
 ;;; collect-table.el ends here

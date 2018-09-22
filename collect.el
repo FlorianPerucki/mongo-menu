@@ -271,6 +271,21 @@ collection: string name of the collection
 column: plist"
   (or (plist-get column :width) collect-default-column-width))
 
+(defun collect--get-column-value (database collection column value)
+  "Return the given column's value according to user preference.
+DATABASE: string name of the database
+COLLECTION: string name of the collection
+COLUMN: plist
+VALUE: a value for this column"
+  (let ((transform (plist-get column :transform)))
+    (if (not (null transform))
+        (if (not (functionp transform))
+            (error ":transform must be a function")
+          (funcall transform value))
+      ;; this is the last time we format the value; at this point we
+      ;; need to make sure we have a string
+      (format "%s" value))))
+
 (defun collect--get-column-name (database collection column)
   "Return the given column's display name, which could be the
 :name property (the remote name) or an :alias."
