@@ -94,7 +94,7 @@ HIDE: register database but don't propose it in databases hydra"
                              :hide hide))))))
 
 ;;;###autoload
-(cl-defun collect-add-collection (&key database name key columns actions sort limit heads display key-not-oid)
+(cl-defun collect-add-collection (&key database name key columns actions sort limit heads display key-not-oid no-header)
   "Register a collection to an existing database.
 
 DATABASE: name of the database
@@ -119,6 +119,7 @@ instead of putting it inside an ObjectId().
                             :limit limit
                             :display display
                             :key-not-oid key-not-oid
+                            :no-header no-header
                             :heads (collect--configure-heads database name heads)))))
     (collect--set-property :collections value database-object t)))
 
