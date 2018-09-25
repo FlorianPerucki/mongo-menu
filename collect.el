@@ -406,7 +406,7 @@ anything else: currently not implemented"
                       (plist-get action :collection)
                       (plist-get entry :collection)))
          ;; document unique id
-         (document-id (plist-get entry :document-id))
+         (document-id (collect--get-entry-id action entry))
          ;; if provided, this is the field name to use instead of the
          ;; database default unique id field
          (foreign-key (plist-get action :foreign))
@@ -431,7 +431,18 @@ anything else: currently not implemented"
                          :single single)
       (error "Unknown action type %S" action-type))))
 
- ; TODO limit + sort
+(defun collect--get-entry-id (action entry)
+  "Get the document ID value from ENTRY. If ACTION has a non-nil :from property,
+its value is used as the column name from which to get the ID value. Otherwise the
+ENTRY :document-id property is used as the value."
+  (let* ((document-id (plist-get entry :document-id))
+         (entry (plist-get entry :entry))
+         (fields (get-text-property 0 :fields entry))
+         (id-key (plist-get action :from))
+         (field (cdr (assoc id-key fields))))
+    (if id-key
+        (plist-get (cdr (assoc id-key fields)) :value)
+      document-id)))
 
 ;; helpers
 
@@ -479,10 +490,67 @@ property is already set the new value is appended."
   (let ((requote (collect--get-database-function "requote-output" database)))
     (funcall requote output)))
 
-(defun collect--format-entry-document (database collection row)
-  "Format a data ROW so it can be displayed in the selected front tool (ivy)"
-  (let ((format-function (collect--get-front-function "format-entry-document" database collection)))
-    (funcall format-function database collection row)))
+(defun collect--format-entry-document (database collection entry)
+  "Return a string for a single document row."
+  (let* ((fields (collect--format-document-fields database collection (cdr entry)))
+         (id (car entry)))
+    (collect--format-entry-document-output database collection id fields)))
+
+(defun collect--format-entry-document-output (database collection document-id fields)
+  "Lets the selected front-end format a single row output for its internal use.
+
+FIELDS: alist of column plist"
+  (let ((format-document-output (collect--get-front-function "format-entry-document-output"
+                                                             database
+                                                             collection)))
+    (funcall format-document-output database collection document-id fields)))
+
+(defun collect--format-document-fields (database collection row)
+  "Generate an alist element containing the necessary data to display a single row"
+  (let* ((fields (list))
+         (collect--tmp-index 0)
+         (columns (collect--get-collection-columns database collection))
+         (len (length row)))
+    (when (not (equal len (length columns)))
+      (error "Columns template and row columns mismatch"))
+    (while (< collect--tmp-index len)
+      (let* ((column (elt columns collect--tmp-index))
+             (raw-value (elt row collect--tmp-index))
+             (value (collect--get-column-value database collection column raw-value))
+             (width (collect--get-column-width database collection column))
+             (hide (plist-get column :hide))
+             (name (plist-get column :name)))
+        (setq fields (append
+                      fields
+                      (list
+                       `(,name . ,(list
+                                   :name name
+                                   :hide hide
+                                   :raw-value raw-value
+                                   :value (collect--format-document-field database
+                                                                          collection
+                                                                          value
+                                                                          width)))))))
+      (setq collect--tmp-index (1+ collect--tmp-index)))
+    fields))
+
+(defun collect--format-document-field (database collection value width)
+  "Let the selected front-end format a single column value for a single row."
+  (let ((format-document-field (collect--get-front-function "format-document-field" database collection)))
+    (funcall format-document-field value width)))
+
+(defun collect--propertize-document-row (database collection id fields output)
+  "The returned string has the following properties:
+database: string name of the database
+collection: string name of the collection
+document-id: ID of the row document
+fields: an alist of property list so we can easily get a column's info from
+its name"
+  (propertize output
+              :database database
+              :collection collection
+              :document-id id
+              :fields fields))
 
 (provide 'collect)
 ;;; collect.el ends here

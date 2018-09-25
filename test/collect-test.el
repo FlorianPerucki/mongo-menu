@@ -333,7 +333,7 @@
     :key "c"
     :display 'table
     :columns '((:name "_id" :width 30)
-               (:name "name" :width 50))
+               (:name "name" :alias "other-name" :width 50))
     :sort "name: 1"
     :limit 15
     :actions '((:name "Items"
@@ -341,6 +341,12 @@
                       :collection "collection2"
                       :foreign "item"
                       :query "\"some.flag\": true"
+                      :sort "_id: -1"
+                      :limit 100)
+               (:name "Items2"
+                      :key "d"
+                      :collection "collection2"
+                      :from "name"
                       :sort "_id: -1"
                       :limit 100))))
 
@@ -375,19 +381,76 @@
           :times 1)
     (collect-show-collections "db1" t))
 
-  ;; test documents view
-  ;; (let ((collection-entry #("collection1" 0 11 (:collection "collection1" :database "db1"))))
-  ;;   (with-mock
-  ;;     (stub collect--mongodb-raw-query => "[{\"_id\": \"123\", \"name\": \"foo\"}]")
-  ;;     (mock (collect--display
-  ;;            :database "db1"
-  ;;            :collection "collection1"
-  ;;            :entries '(("123" ["123" "foo"])))
-  ;;           :times 1)
-  ;;     (funcall (collect--get-front-function "action-show-documents" "db1" "collection1") collection-entry)
-  ;;     ))
-
   (should (equal
            (mapcar 'car (collect--get-actions "db1" "collection1"))
-           (list "RET" "y" "c"))))
+           (list "RET" "y" "c" "d")))
+
+  ;; test running an action on a table row
+  (with-mock
+    (stub collect--mongodb-raw-query => "[{\"_id\": \"123\", \"name\": \"foo\"}]")
+
+    ;; simulate getting tabulated-list-mode current selection
+    (stub tabulated-list-get-id =>
+          #("123" 0 3
+            (:fields (("_id" :name "_id" :hide nil :raw-value "123" :value "123")
+                      ("name" :name "name" :hide nil :raw-value "foo" :value "foo"))
+                     :document-id "123"
+                     :collection "collection1"
+                     :database "db1"))
+          ["123" "foo"])
+
+    ;; display table
+    (collect-display :database "db1"
+                     :collection "collection1"
+                     :document-id "123")
+
+    (mock (collect--ivy-read
+           ;; prompt
+           "db1 > collection2 > "
+           ;; entries
+           '(#("123                           " 0 30
+               (:fields (("_id"
+                          :name "_id"
+                          :hide nil
+                          :raw-value "123"
+                          :value "123                           "))
+                        :document-id "123"
+                        :collection "collection2"
+                        :database "db1")))
+           ;; actions
+           '(1
+             ("RET" collect--ivy-action-show-document "Open in buffer")
+             ("y" collect--ivy-action-copy-id "Copy row ID")))
+          :times 1)
+
+    ;; press command key
+    (execute-kbd-macro (vconcat (kbd "c")))
+
+    ;; test the :from keyword
+    (mock (collect--mongodb-raw-query
+           "db1"
+           "var cursor = db.collection2.find({\"_id\": ObjectId(\"foo\")}, {\"_id\": 1}).sort({_id: -1}).skip(0).limit(100); print(\"[\"); while(cursor.hasNext()) { printjson(cursor.next()); if (cursor.hasNext()) {print(\",\");}} print(\"]\");")
+          => "[{\"_id\": \"foo\", \"name\": \"bar\"}]")
+
+    (mock (collect--ivy-read
+           ;; prompt
+           "db1 > collection2 > "
+           ;; entries
+           '(#("foo                           " 0 30
+               (:fields (("_id"
+                          :name "_id"
+                          :hide nil
+                          :raw-value "foo"
+                          :value "foo                           "))
+                        :document-id "foo"
+                        :collection "collection2"
+                        :database "db1")))
+           ;; actions
+           '(1
+             ("RET" collect--ivy-action-show-document "Open in buffer")
+             ("y" collect--ivy-action-copy-id "Copy row ID")))
+          :times 1)
+
+    ;; press command key
+    (execute-kbd-macro (vconcat (kbd "d")))))
 ;; collect-test.el ends here
