@@ -94,12 +94,12 @@ collections if collection is nil, documents if collection is non-nil"
          (collection (get-text-property 0 :collection entry))
          ;; document unique id
          (document-id (get-text-property 0 :document-id entry))
-         (fields (get-text-property 0 :fields fields)))
+         (fields (get-text-property 0 :fields entry)))
     (list
      :database database
      :collection collection
      :document-id document-id
-     :fields fields)))
+     :entry entry)))
 
 (defun collect--ivy-format-document-field (value width)
   (format

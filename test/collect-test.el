@@ -31,12 +31,46 @@
 (require 'json)
 (require 'hydra)
 (require 'el-mock)
+(require 'ivy)
 (require 'ert)
 (load-file "collect-hydra.el")
 (load-file "collect-mongodb.el")
 (load-file "collect-ivy.el")
 (load-file "collect-table.el")
 (load-file "collect.el")
+
+
+;; heavily inspired from https://github.com/abo-abo/swiper/blob/master/ivy-test.el
+
+(defvar ivy-expr nil
+  "Holds a test expression to evaluate with `ivy-eval'.")
+
+(defvar ivy-result nil
+  "Holds the eval result of `ivy-expr' by `ivy-eval'.")
+
+(defun ivy-eval ()
+  "Evaluate `ivy-expr'."
+  (interactive)
+  (setq ivy-result (eval ivy-expr)))
+
+(defun ivy-with (expr keys)
+  "Evaluate EXPR followed by KEYS."
+  (let ((ivy-expr expr))
+    (execute-kbd-macro
+     (vconcat (kbd "C-c i")
+              (kbd keys)))
+    ivy-result))
+
+(global-set-key (kbd "C-c i") 'ivy-eval)
+
+(defun collect-hydra-keys (keys)
+  "Run hydra-collect/body and then choose KEYS heads successively"
+  (execute-kbd-macro
+   (vconcat (kbd "C-c h")
+            (kbd keys))))
+
+(global-set-key (kbd "C-c h") 'hydra-collect/body)
+
 
 (ert-deftest test-collect ()
   (collect-setup
@@ -130,10 +164,10 @@
     :sort "name: 1"
     :limit 15
     :heads '((:name "Foobar"
-                      :key "p"
-                      :query "\"foo\": \"bar\""
-                      :sort "_id: -1"
-                      :limit 100)))
+                    :key "p"
+                    :query "\"foo\": \"bar\""
+                    :sort "_id: -1"
+                    :limit 100)))
    (collect-add-database
     :name "db2"
     :key "2"
@@ -148,14 +182,7 @@
            (length (collect--hydra-databases-heads))
            1))
 
-  (global-set-key (kbd "C-c c") 'hydra-collect/body)
-
-  (defun collect-hydra-keys (keys)
-    "Run hydra-collect/body and then choose KEYS heads successively"
-    (execute-kbd-macro
-     (vconcat (kbd "C-c c")
-              (kbd keys))))
-
+  ;; running "Foobar" head
   (with-mock
     (stub collect--mongodb-raw-query => "[{\"_id\": 123, \"name\": \"foo\"}]")
     (mock (collect--ivy-read
@@ -197,8 +224,6 @@
                       :sort "_id: -1"
                       :limit 100))))
 
-  (global-set-key (kbd "C-c c") 'hydra-collect/body)
-
   ;; test databases view
   (with-mock
     (stub collect--mongodb-raw-query => "[{\"_id\": \"123\", \"name\": \"foo\"}]")
@@ -206,12 +231,12 @@
            ;; prompt
            "> "
            ;; entries
-          '(#("db1                                                host1                                             "
-             0 101
-             (:database "db1")))
-          ;; actions
-          '(1 ("RET" collect--ivy-show-collections-defined "Show collections")
-              ("O" collect--ivy-show-collections "Show all collections")))
+           '(#("db1                                                host1                                             "
+               0 101
+               (:database "db1")))
+           ;; actions
+           '(1 ("RET" collect--ivy-show-collections-defined "Show collections")
+               ("O" collect--ivy-show-collections "Show all collections")))
           :times 1)
     (collect-show-databases))
 
@@ -222,10 +247,11 @@
            ;; prompt
            "db1 > "
            ;; entries
-          '(#("collection1" 0 11 (:collection "collection1" :database "db1")))
-          ;; actions
-          '(1 ("RET" collect--ivy-action-show-documents "Show documents")))
+           '(#("collection1" 0 11 (:collection "collection1" :database "db1")))
+           ;; actions
+           '(1 ("RET" collect--ivy-action-show-documents "Show documents")))
           :times 1)
+
     (collect-show-collections "db1" t))
 
   ;; test documents view
@@ -236,11 +262,52 @@
              :database "db1"
              :collection "collection1"
              :entries '(#("123                            foo                                               "
-                         0 81
-                         (:document-id "123" :collection "collection1" :database "db1"))))
+                          0 81
+                          (:document-id "123" :collection "collection1" :database "db1"))))
             :times 1)
       (funcall (collect--get-front-function "action-show-documents" "db1" "collection1") collection-entry)
       ))
+
+  ;; test ivy action
+  (with-mock
+    (stub collect--mongodb-raw-query => "[{\"_id\": \"123\", \"name\": \"foo\"}]")
+    (mock (collect--display :database "db1"
+                     :collection "collection2"
+                     :entries '(#("123                           " 0 30
+                                  ;; we did not register collection2 so we only display the document-id column
+                                  (:fields (("_id" :name "_id" :hide nil :raw-value "123" :value "123                           "))
+                                           :document-id "123" :collection "collection2" :database "db1"))))
+          :times 1)
+
+    (should (equal (ivy-with `(ivy-read
+                               ;; prompt
+                               "db1 > collection2 > "
+                               ;; entries
+                               '(#("123                           " 0 30
+                                   (:fields (("_id"
+                                              :name "_id"
+                                              :hide nil
+                                              :raw-value "123"
+                                              :value "123                           "))
+                                            :document-id "123"
+                                            :collection "collection2"
+                                            :database "db1")))
+                               ;; actions
+                               :action
+                               `(1
+                                 ,(collect--build-action "db1" "collection1"
+                                                         '(:name "Items"
+                                                                 :key "c"
+                                                                 :collection "collection2"
+                                                                 :foreign "item"
+                                                                 :query "\"some.flag\": true"
+                                                                 :sort "_id: -1"
+                                                                 :limit 100))))
+                             "M-o c")
+                   #("123                           " 0 30
+                     '(
+                      :fields (("_id" :name "_id" :hide nil :raw-value "123" :value "123                           "))
+                      :document-id "123" :collection "collection2" :database "db1")))))
 
   (should (equal
            (mapcar 'car (collect--get-actions "db1" "collection1"))
@@ -359,12 +426,12 @@
            ;; prompt
            "> "
            ;; entries
-          '(#("db1                                                host1                                             "
-             0 101
-             (:database "db1")))
-          ;; actions
-          '(1 ("RET" collect--ivy-show-collections-defined "Show collections")
-              ("O" collect--ivy-show-collections "Show all collections")))
+           '(#("db1                                                host1                                             "
+               0 101
+               (:database "db1")))
+           ;; actions
+           '(1 ("RET" collect--ivy-show-collections-defined "Show collections")
+               ("O" collect--ivy-show-collections "Show all collections")))
           :times 1)
     (collect-show-databases))
 
@@ -375,9 +442,9 @@
            ;; prompt
            "db1 > "
            ;; entries
-          '(#("collection1" 0 11 (:collection "collection1" :database "db1")))
-          ;; actions
-          '(1 ("RET" collect--ivy-action-show-documents "Show documents")))
+           '(#("collection1" 0 11 (:collection "collection1" :database "db1")))
+           ;; actions
+           '(1 ("RET" collect--ivy-action-show-documents "Show documents")))
           :times 1)
     (collect-show-collections "db1" t))
 

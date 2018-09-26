@@ -3,7 +3,8 @@
 
 (package-file "collect.el")
 
-(depends-on "dash")
+(depends-on "ivy")
+(depends-on "hydra")
 
 (development
  (depends-on "ert-runner")
